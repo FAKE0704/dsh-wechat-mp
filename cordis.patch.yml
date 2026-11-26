@@ -1,5 +1,4 @@
 # dsh-wechat-mp 组合包层：插入插件行（装包即启用，无需手写 profile 依赖）。
-# 凭据与参数在「设置 → 公众号」页改；这里的 config 只是缺省值。
 # AppID 可在此填写，或留空改走凭据 WECHAT_MP_APPID；AppSecret 只走凭据库。
 - insert:
     - id: dsh-wechat-mp

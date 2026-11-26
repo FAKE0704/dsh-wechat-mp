@@ -1,15 +1,10 @@
 {
   "name": "dsh-wechat-mp",
-  "version": "0.4.0",
+  "version": "0.1.0",
   "type": "module",
   "main": "index.js",
-  "description": "微信公众号文章 dsh 插件：草稿箱/发布/图片素材十工具（直连微信 API，零宿主依赖，publish 过审批门）。AppID/AppSecret 在「设置 → 公众号」页配置，Secret 只存 dsh 凭据库。",
+  "description": "微信公众号文章 dsh 插件：草稿箱/发布/图片素材八工具（直连微信 API，零宿主依赖，publish 过审批门）。真源 = FAKE0704/Genshu packages/dsh-plugins/dsh-wechat-mp（本仓为镜像）",
   "license": "MIT",
-  "author": "FAKE0704",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/FAKE0704/dsh-wechat-mp.git"
-  },
   "keywords": [
     "dsh",
     "dsh-plugin",
@@ -21,40 +16,23 @@
   "engines": {
     "dsh": ">=0.2.2-rc.5 <0.3.0"
   },
-  "exports": {
-    ".": "./index.js",
-    "./client": "./client.js",
-    "./locale/*.json": "./locale/*.json",
-    "./icon": "./icon.svg",
-    "./package.json": "./package.json"
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "test": "bun test"
   },
   "files": [
     "index.js",
     "core.js",
-    "settings.js",
-    "client.js",
     "cordis.patch.yml",
-    "locale/*.json",
-    "icon.svg",
     "README.md",
-    "LICENSE",
-    "render.js"
+    "LICENSE"
   ],
-  "dsh": {
-    "bundle": {
-      "patch": "./cordis.patch.yml"
-    },
-    "client": {
-      "platform": "web",
-      "immediately": true,
-      "inject": [
-        "@deepseek-ai/dsh-client-ui-settings"
-      ]
-    }
-  },
-  "scripts": {
-    "check": "node --check index.js && node --check core.js && node --check settings.js && node --check client.js",
-    "test": "bun test"
-  },
-  "sideEffects": false
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FAKE0704/dsh-wechat-mp.git"
+  }
 }

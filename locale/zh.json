@@ -1,6 +1,0 @@
-{
-  "meta": {
-    "title": "公众号",
-    "description": "在 Harness 里直接推进微信公众号文章：八个 agent 工具（草稿箱/发布/图片素材）直连 api.weixin.qq.com。AppID 与 AppSecret 在「设置 → 公众号」页配置，Secret 只存 dsh 凭据库，不进配置文件。微信要求把本机出口 IP 加入公众号的 IP 白名单。"
-  }
-}
