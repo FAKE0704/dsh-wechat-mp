@@ -71,7 +71,6 @@ window.__ModuleLoader__.load({
         previewDraftTitle: '草稿箱',
         previewDraftSyncing: '正在同步草稿箱…',
         previewDraftEmpty: '草稿箱为空（或凭据/白名单未就绪）。',
-        previewDraftLoad: (t) => `预览：${t}`,
       },
       en: {
         section: "WeChat Official Account",
@@ -129,7 +128,6 @@ window.__ModuleLoader__.load({
         previewDraftTitle: 'Draft box',
         previewDraftSyncing: 'Syncing draft box…',
         previewDraftEmpty: 'Draft box is empty (or credentials / IP allowlist are not ready).',
-        previewDraftLoad: (t) => `Preview: ${t}`,
       },
     }
 
@@ -481,7 +479,8 @@ window.__ModuleLoader__.load({
           setBusy(`draft:${mediaId}`)
           try {
             const res = await apiCall('loadDraft', { mediaId })
-            setResult({ ok: res.ok === true, text: res.ok ? t.t('previewDraftLoad')(title || mediaId) : `${String(res.message ?? 'failed')}${res.hint ? `\n${res.hint}` : ''}` })
+            // 成功不弹消息——左侧手机已换内容，肉眼可见；失败才提示
+            if (res.ok !== true) setResult({ ok: false, text: `${String(res.message ?? 'failed')}${res.hint ? `\n${res.hint}` : ''}` })
             if (res.ok === true) await refresh()
           } finally {
             setBusy(null)
