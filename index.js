@@ -17,7 +17,7 @@
 
 import { createSemantics, decideWechatMpGate, resolveConfig } from './core.js'
 import { createSettingsService, WEB_PATH } from './settings.js'
-import { WECHAT_MP_SKILL_NAME, WECHAT_MP_SKILL_DESCRIPTION, WECHAT_MP_SKILL_WHEN_TO_USE, WECHAT_MP_SKILL_CONTENT } from './skill.js'
+import { WECHAT_MP_SKILL_NAME, WECHAT_MP_SKILL_DESCRIPTION, WECHAT_MP_SKILL_WHEN_TO_USE, WECHAT_MP_SKILL_CONTENT, loadArticleWriterSkill } from './skill.js'
 
 export const name = 'dsh-wechat-mp'
 export const inject = ['tools', 'credentials']
@@ -192,7 +192,7 @@ export function apply(ctx, config) {
       return res
     })
 
-  // ---------- 内置 skill：交付格式规范（V0.5.0） ----------
+  // ---------- 内置 skill：交付格式规范（V0.5.0） + article-writer 排版规范（monorepo 线并入） ----------
   // 经 ctx.get 惰性取 skill 服务：宿主没有 skill 子系统时自动跳过，不拖垮工具面。
   // runtime register 只需 name/description/invocation 合法；content 在加载时原样发给模型。
   const skills = ctx.get('skills')
@@ -204,6 +204,17 @@ export function apply(ctx, config) {
       source: 'bundled',
       content: WECHAT_MP_SKILL_CONTENT,
     }))
+    // article-writer：暗色卡片排版规范（一段一卡片 + 色板模板），文件在 skills/ 目录
+    // （DSH 扫描根不含包内 skills/，文件形态不可达，故同样运行时注册）。
+    const articleWriter = loadArticleWriterSkill()
+    if (articleWriter) {
+      ctx.effect(() => skills.register({
+        name: articleWriter.name,
+        description: articleWriter.description,
+        source: 'bundled',
+        content: articleWriter.content,
+      }))
+    }
   }
 
   // ---------- V0.2.0：设置页 Web 桥（POST /api/dsh-wechat-mp，{ method, args }） ----------

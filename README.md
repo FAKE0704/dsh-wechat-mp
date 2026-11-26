@@ -158,9 +158,12 @@ config:
 - **装了 sharp** → 自动转 jpg（quality 90）后上传，正文图片与封面同样生效。V0.5.0 起 sharp 以 `optionalDependencies` 随包声明，`dsh plugin add` 安装包时一并装好（macOS/Linux/Windows 均有 N-API 预编译产物，无需编译）；
 - **没装**（如手工拷贝目录安装）→ 工具返回 `webp_convert_unavailable`，提示一次性安装 sharp 或手工转换，不会静默猜测。
 
-## 内置 skill：交付格式规范（V0.5.0）
+## 内置 skill：交付格式规范 + 排版规范（V0.5.0）
 
-插件向 skill 注册表注册 `wechat-mp-article`（kebab-case，model/user 均可调用）：把「最终交付物 = 草稿箱草稿，不是本地 .md」、render → preview → 草稿标准链路、封面规则、message 取 mediaId 的读法固化为模型可见指令。宿主没有 skill 子系统时自动跳过，不影响工具面。
+插件向 skill 注册表注册两个 skill（kebab-case，model/user 均可调用；宿主没有 skill 子系统时自动跳过）：
+
+- **`wechat-mp-article`**（代码内置）：交付格式规范——「最终交付物 = 草稿箱草稿，不是本地 .md」、render → preview → 草稿标准链路、封面规则、message 取 mediaId 的读法。
+- **`article-writer`**（`skills/article-writer/`，monorepo 真源线并入）：暗色卡片排版规范——一段一卡片、内联样式 `<span>` 模板、色板约定；排版风格问题加载它，交付流程问题加载 `wechat-mp-article`。
 
 ## V0.5.0 变更摘要
 

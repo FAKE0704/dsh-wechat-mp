@@ -4,6 +4,14 @@
 // 写完文章把本地 .md 当成最终交付物收尾，跳过 render/preview/草稿链路。
 // 这个 skill 把交付格式固化成模型可见的指令，随插件注册（ctx.skills.register），
 // 宿主没有 skill 服务时自动跳过，不影响工具面。
+//
+// 另有 monorepo 真源线带来的 skills/article-writer（暗色卡片排版规范，文件形态）：
+// DSH 的 skill 扫描根不含 <包>/skills/，文件形态在 dsh 里不可达，所以这里一并做
+// 运行时注册（读包内文件，缺失/损坏时返回 null 跳过，不拖垮插件加载）。
+
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 export const WECHAT_MP_SKILL_NAME = 'wechat-mp-article'
 
@@ -47,3 +55,34 @@ export const WECHAT_MP_SKILL_CONTENT = `# 公众号文章交付规范（dsh-wech
 - 禁止未经 preview 直接 draft-create（用户明确要求除外）。
 - \`publish\` 恒过人工审批门：绝不自动发表，发布后不可撤销。
 `
+
+/**
+ * 读取 monorepo 带来的 article-writer 排版 skill（文件形态，apply 期同步读一次）。
+ * @returns {{name: string, description: string, content: string} | null} 文件缺失/无 frontmatter 时 null
+ */
+export function loadArticleWriterSkill() {
+  try {
+    const base = join(dirname(fileURLToPath(import.meta.url)), 'skills', 'article-writer')
+    const raw = readFileSync(join(base, 'SKILL.md'), 'utf8')
+    const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(raw)
+    if (!match) return null
+    const meta = {}
+    for (const line of match[1].split(/\r?\n/)) {
+      const hit = /^(name|description):\s*(.+)$/.exec(line.trim())
+      if (hit) meta[hit[1]] = hit[2].trim()
+    }
+    if (!meta.name || !meta.description) return null
+    const body = raw.slice(match[0].length).trim()
+    let instructions = ''
+    try {
+      instructions = readFileSync(join(base, 'instructions.md'), 'utf8').trim()
+    } catch { /* instructions.md 可选 */ }
+    return {
+      name: meta.name,
+      description: meta.description,
+      content: instructions ? `${body}\n\n${instructions}` : body,
+    }
+  } catch {
+    return null
+  }
+}

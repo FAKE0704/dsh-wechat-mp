@@ -39,7 +39,8 @@
     "README.md",
     "LICENSE",
     "render.js",
-    "skill.js"
+    "skill.js",
+    "skills/**/*"
   ],
   "dsh": {
     "bundle": {
