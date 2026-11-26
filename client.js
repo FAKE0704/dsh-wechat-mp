@@ -49,7 +49,7 @@ window.__ModuleLoader__.load({
         testOk: '凭据可用（能换到 access_token）。',
         testFail: '凭据不可用：',
         testWarn: '测试返回异常：',
-        previewSection: '预览',
+        previewSection: '公众号预览',
         previewLead: 'agent 写完文章会自动把预览推到这里。审查正文与封面，没问题就点「推送到草稿箱」（只进草稿箱，不发表）。',
         previewEmpty: '暂无待审查的预览。在会话里让 agent 写文章，写完它会调用 wechat-mp-preview 把预览推到这里。',
         previewNone: '读取预览失败：',
@@ -106,7 +106,7 @@ window.__ModuleLoader__.load({
         testOk: 'Credentials work (an access_token was obtained).',
         testFail: 'Credentials failed: ',
         testWarn: 'Test returned an error: ',
-        previewSection: 'Preview',
+        previewSection: 'WeChat Preview',
         previewLead: "When the agent finishes an article it pushes a preview here. Review the body and cover, then click Send to drafts (draft box only, never published).",
         previewEmpty: 'No preview waiting for review. Ask the agent to write an article; it calls wechat-mp-preview when done and the preview lands here.',
         previewNone: 'Failed to load preview: ',
@@ -572,31 +572,20 @@ window.__ModuleLoader__.load({
         h('path', { d: 'M7 9.5h7M7 12.5h5' }))
     }
 
-    function PreviewIcon(props) {
-      const size = typeof props?.size === 'number' ? props.size : 16
-      return h('svg', {
-        width: size, height: size, viewBox: '0 0 24 24', fill: 'none',
-        stroke: 'currentColor', strokeWidth: 1.7, strokeLinecap: 'round', strokeLinejoin: 'round',
-        'aria-hidden': true,
-      },
-        h('path', { d: 'M3 12s3.2-5.5 9-5.5S21 12 21 12s-3.2 5.5-9 5.5S3 12 3 12z' }),
-        h('circle', { cx: 12, cy: 12, r: 2.6 }))
-    }
-
     return {
       inject: ['slots', 'locale'],
       apply(ctx) {
         const t = makeT(ctx)
         const Page = makePage(ctx, t)
         const PreviewPage = makePreviewPage(ctx, t)
-        // 预览是侧边栏面板（与工作区文件/终端/浏览器同列）：sidebar.panellist 出图标，
-        // main 按面板 id 分发中央面板主体。
-        ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
-          name: 'sidebar.panellist', id: 'dsh-wechat-mp-preview', order: 80, label: () => t.t('previewSection'),
-        }, PreviewIcon))
-        ctx.slots.inject('main', () => ctx.slots.register({
-          name: 'main', key: 'dsh-wechat-mp-preview',
+        // 预览挂右侧栏：sidebar.right.pane.tab（body）+ .pane.tab.title（chip 标题），
+        // 同一 key 寻址；右侧栏控制器按在效 tab 类型分发。
+        ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
+          name: 'sidebar.right.pane.tab', key: 'dsh-wechat-mp-preview',
         }, PreviewPage))
+        ctx.slots.inject('sidebar.right.pane.tab.title', () => ctx.slots.register({
+          name: 'sidebar.right.pane.tab.title', key: 'dsh-wechat-mp-preview',
+        }, function PreviewTabTitle() { return h('span', null, t.t('previewSection')) }))
         // 凭据配置仍在设置页
         ctx.slots.inject('settings.section', () => ctx.slots.register({
           name: 'settings.section', id: 'dsh-wechat-mp', order: 65, label: () => t.t('section'),
