@@ -72,7 +72,6 @@ window.__ModuleLoader__.load({
         previewDraftSyncing: '正在同步草稿箱…',
         previewDraftEmpty: '草稿箱为空（或凭据/白名单未就绪）。',
         previewDraftLoad: (t) => `预览：${t}`,
-        previewSource: (s) => `来源：${s}`,
       },
       en: {
         section: "WeChat Official Account",
@@ -131,7 +130,6 @@ window.__ModuleLoader__.load({
         previewDraftSyncing: 'Syncing draft box…',
         previewDraftEmpty: 'Draft box is empty (or credentials / IP allowlist are not ready).',
         previewDraftLoad: (t) => `Preview: ${t}`,
-        previewSource: (s) => `Source: ${s}`,
       },
     }
 
@@ -367,12 +365,6 @@ window.__ModuleLoader__.load({
     // 左画布仿手机宽度、右栏 300px 操作列，窄屏自动折行。
     const PV_CSS = `
 .dshwmp-pv { display: flex; flex-direction: column; gap: 12px; height: 100%; min-height: 0; min-width: 0; overflow-x: hidden; }
-.dshwmp-pv-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.dshwmp-pv-title { font-size: 15px; font-weight: 650; color: var(--dsw-alias-label-primary); line-height: 1.45; margin: 0; }
-.dshwmp-pv-sub { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
-.dshwmp-pv-dot { width: 4px; height: 4px; border-radius: 999px; background: var(--dsw-alias-label-secondary); flex-shrink: 0; }
-.dshwmp-pv-meta { font-size: 12px; color: var(--dsw-alias-label-secondary); min-width: 0; overflow-wrap: anywhere; word-break: break-all; }
-.dshwmp-pv-badges { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex-shrink: 0; padding-top: 2px; }
 .dshwmp-pv-body { display: flex; gap: 14px; flex: 1 1 auto; min-height: 420px; flex-wrap: wrap; align-items: stretch; }
 .dshwmp-pv-canvas { flex: 1 1 420px; min-width: 300px; display: flex; justify-content: center; align-items: flex-start; overflow: auto; background:
   radial-gradient(1200px 500px at 50% -10%, color-mix(in srgb, var(--dsw-alias-brand-primary) 7%, transparent), transparent 60%),
@@ -499,12 +491,6 @@ window.__ModuleLoader__.load({
         const hasCover = Boolean(pv && (pv.thumbMediaId || pv.thumbFile || pv.thumbUrl))
         const sent = pv?.sent === true
 
-        const badge = (cls, text) => h('span', { className: `dshwmp-badge ${cls}` }, text)
-        // mediaId 等长串截短显示（完整值进 title tooltip），避免撑爆顶栏
-        const shortSource = (s) => {
-          const text = String(s ?? '')
-          return text.length > 34 ? `${text.slice(0, 16)}…${text.slice(-10)}` : text
-        }
         const phone = (pv2) => h('div', { className: 'dshwmp-pv-phone' },
           h('div', { className: 'dshwmp-pv-key dshwmp-pv-key-action' }),
           h('div', { className: 'dshwmp-pv-key dshwmp-pv-key-volup' }),
@@ -535,6 +521,9 @@ window.__ModuleLoader__.load({
               : drafts === null ? h('div', { className: 'dshwmp-pv-note' }, t.t('previewDraftSyncing')) : null),
 
           sideCard(t.t('previewSend'),
+            h('div', { className: 'dshwmp-pv-note' },
+              sent ? t.t('previewSentBadge') : hasCover ? t.t('previewCoverOk') : t.t('previewCoverMissing'),
+              Array.isArray(pv?.warnings) && pv.warnings.length > 0 ? ` · ${t.t('previewWarn')(pv.warnings.length)}` : ''),
             h('button', {
               className: `dshwmp-pv-btn dshwmp-pv-btn-primary ${confirmSend ? 'dshwmp-pv-btn-danger' : ''}`, type: 'button',
               disabled: busy !== null || sent, style: { width: '100%', padding: '9px 12px' }, onClick: () => { void onSend() },
@@ -548,27 +537,6 @@ window.__ModuleLoader__.load({
 
         return h('div', { className: 'dshwmp-pv' },
           h('style', null, PV_CSS),
-
-          h('header', { className: 'dshwmp-pv-head' },
-            h('div', { style: { minWidth: 0 } },
-              h('h2', { className: 'dshwmp-pv-title' }, pv ? String(pv.title ?? '') : t.t('previewSection')),
-              h('div', { className: 'dshwmp-pv-sub' },
-                pv?.source ? h('span', { className: 'dshwmp-pv-meta', title: String(pv.source) }, t.t('previewSource')(shortSource(pv.source))) : null,
-                typeof pv?.chars === 'number' ? [
-                  h('span', { className: 'dshwmp-pv-dot', key: 'd1' }),
-                  h('span', { className: 'dshwmp-pv-meta', key: 'd2' }, t.t('previewChars')(pv.chars, ((pv.bytes ?? 0) / 1024).toFixed(1))),
-                ] : null,
-                pv?.author ? [
-                  h('span', { className: 'dshwmp-pv-dot', key: 'd3' }),
-                  h('span', { className: 'dshwmp-pv-meta', key: 'd4' }, t.t('previewAuthor')(pv.author)),
-                ] : null,
-                Array.isArray(pv?.warnings) && pv.warnings.length > 0 ? [
-                  h('span', { className: 'dshwmp-pv-dot', key: 'd5' }),
-                  h('span', { className: 'dshwmp-pv-meta', key: 'd6', style: { color: 'var(--dsw-alias-state-error-primary)' } }, t.t('previewWarn')(pv.warnings.length)),
-                ] : null)),
-            pv ? h('div', { className: 'dshwmp-pv-badges' },
-              sent ? badge('dshwmp-badge-ok', t.t('previewSentBadge')) : null,
-              badge(hasCover ? 'dshwmp-badge-ok' : 'dshwmp-badge-bad', hasCover ? t.t('previewCoverOk') : t.t('previewCoverMissing'))) : null),
 
           loadError
             ? h('div', { className: 'dshwmp-pv-msg dshwmp-pv-msg-bad', role: 'alert' },
