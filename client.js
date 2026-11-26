@@ -598,16 +598,16 @@ window.__ModuleLoader__.load({
             }],
           })
         })
-        ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
+        ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
           name: 'sidebar.right.pane.tab', key: 'dsh-wechat-mp-preview',
-        }, PreviewPage))
+        }, PreviewPage)), 'dsh-wechat-mp: preview tab body')
         // 凭据配置仍在设置页
-        ctx.slots.inject('settings.section', () => ctx.slots.register({
+        ctx.effect(() => ctx.slots.inject('settings.section', () => ctx.slots.register({
           name: 'settings.section', id: 'dsh-wechat-mp', order: 65, label: () => t.t('section'),
-        }, Page))
-        ctx.slots.inject('settings.section.icon', () => ctx.slots.register({
+        }, Page)), 'dsh-wechat-mp: settings section')
+        ctx.effect(() => ctx.slots.inject('settings.section.icon', () => ctx.slots.register({
           name: 'settings.section.icon', id: 'dsh-wechat-mp',
-        }, SectionIcon))
+        }, SectionIcon)), 'dsh-wechat-mp: settings icon')
       },
     }
   },
