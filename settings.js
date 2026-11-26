@@ -23,7 +23,10 @@ function messageOf(error) {
 /** 归一并校验页面可编辑的字段。apiBase/timeoutMs/maxImageBytes 不在设置页开放，
  *  但桥仍接受（恢复/迁移场景需要，且校验单一真源是 resolveConfig）。 */
 function normalizePatch(current, args) {
-  const next = { ...current }
+  // 设置页编辑的是默认账号：剥掉 accounts（若有），让旧单账号字段继续作为 default 账号生效
+  const base = { ...(typeof current === 'object' && current !== null ? current : {}) }
+  delete base.accounts
+  const next = { ...base }
   if (args.appId !== undefined) next.appId = typeof args.appId === 'string' ? args.appId.trim() : ''
   if (args.secretRef !== undefined) {
     const ref = String(args.secretRef).trim()

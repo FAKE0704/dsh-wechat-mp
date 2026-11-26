@@ -1,8 +1,8 @@
 # dsh-wechat-mp
 
-微信公众号**文章**域 dsh 插件：在 dsh 会话里直接把文章推进公众号草稿箱、替换/删除草稿、提交发布并跟踪发布状态——八个原生工具，**直连微信开放接口**，不依赖任何宿主平台（不需要 CreatorStack、不需要 MCP server、不需要额外后端）。
+微信公众号**文章**域 dsh 插件：在 dsh 会话里直接把文章推进公众号草稿箱、替换/删除草稿、提交发布并跟踪发布状态——十个原生工具，**直连微信开放接口**，不依赖任何宿主平台（不需要 CreatorStack、不需要 MCP server、不需要额外后端）。
 
-真源 = [Genshu monorepo](https://github.com/FAKE0704/Genshu) 的 `packages/dsh-plugins/dsh-wechat-mp`（公共仓 [FAKE0704/dsh-wechat-mp](https://github.com/FAKE0704/dsh-wechat-mp) 为镜像，经 `scripts/publish-dsh-wechat-mp.sh` 幂等组装推送）。
+本仓库（[FAKE0704/dsh-wechat-mp](https://github.com/FAKE0704/dsh-wechat-mp)）即真源：V0.3.0 起（渲染器/预检/多账号）直接在本仓开发发布，不再走 Genshu monorepo 真源→镜像链路。
 
 ## 它解决什么问题
 
@@ -12,7 +12,9 @@
 - **封面自动兜底**：草稿接口只认 `thumb_media_id`（传 URL 会 `40007`），给本地文件或网络图片即可自动上传换 id；
 - **正文可以直接给文件路径**：`contentFile` 由插件自己读，不把整篇 HTML 塞进对话上下文；
 - **错误码翻译成人话**：`40164`（IP 不在白名单）、`40125`（Secret 不匹配）、`48001`（个人主体不能 API 发布）等直接给处置动作；
-- **发布过审批门**：`wechat-mp-publish` 每次都要人工批准（发布后对外公开且不可撤销）。
+- **发布过审批门**：`wechat-mp-publish` 每次都要人工批准（发布后对外公开且不可撤销）；
+- **Markdown 直接渲染**（V0.3.0）：`wechat-mp-render` 把 Markdown 转成公众号兼容 HTML——所有样式逐元素内联（微信后台会剥 `<style>` 与 class），渲染后自动预检；
+- **正文预检 fail-fast**（V0.3.0）：字符数/体积/图片格式在推草稿前就校验，超限给具体数字与处置建议，省一轮草稿往返。
 
 ## 安装
 
@@ -57,18 +59,44 @@ Secret 只用于换 `access_token`，token 只在进程内缓存，不落盘、�
 
 公众号后台「开发 → 基本配置 → IP 白名单」必须包含**运行 dsh 这台机器的出口 IP**。家庭宽带 IP 会变——变了就报 `40164`/`61004`，错误串里会带微信看到的真实出口 IP，照着加白名单即可。先跑 `wechat-mp-status` 可以在动文章之前把这个问题暴露出来。
 
-## 八个工具
+## 十个工具
 
 | 工具 | 作用 | 审批 |
 |---|---|---|
 | `wechat-mp-status` | 校验凭据、换 token，报 AppID/token 剩余时间 | 免审 |
-| `wechat-mp-upload-image` | 图片（本地 / URL / data URL）→ 永久素材，回 `media_id` + `url` | 免审 |
-| `wechat-mp-draft-create` | 新建草稿（自动封面 + 正文图片转素材） | 免审 |
+| `wechat-mp-render` | **Markdown → 公众号 HTML**（样式逐元素内联，渲染即预检，输出文件路径可直接当 `contentFile`） | 免审 |
+| `wechat-mp-precheck` | **正文预检**：字符数 ≤20000、体积 <1MB、图片格式白名单，超限给具体数字与建议 | 免审 |
+| `wechat-mp-upload-image` | 图片（本地 / URL / data URL）→ 永久素材，回 `media_id` + `url`；webp 自动转 jpg（需 sharp） | 免审 |
+| `wechat-mp-draft-create` | 新建草稿（自动封面 + 正文图片转素材 + 入口预检 fail-fast） | 免审 |
 | `wechat-mp-draft-update` | 替换草稿（先建新、成功后再删旧；旧稿删不掉只告警） | 免审 |
 | `wechat-mp-draft-list` | 草稿箱列表（media_id/标题/作者/更新时间，分页 ≤20） | 免审 |
 | `wechat-mp-draft-delete` | 删草稿 | 免审 |
 | `wechat-mp-publish` | 提交发布（`freepublish`，异步），回 `publish_id` | **ask** |
 | `wechat-mp-publish-status` | 发布状态（发布中/成功/失败/审核不通过）+ 文章链接 | 免审 |
+
+除 `wechat-mp-publish`（只有 `mediaId`）外，全部工具接受可选 `account` 参数选择多账号（见下文「多账号」）。
+
+### 渲染器用法示例
+
+```text
+wechat-mp-render {
+  mdFile: "/path/article.md",        # 或 markdown: "…" 直接给字符串
+  outFile: "/path/article.html"      # 缺省 = 同目录 <同名>.html
+}                                    # → 绝对路径，frontmatter 的 title 自动带上
+wechat-mp-draft-create {
+  title: "标题", contentFile: "<上一步返回的绝对路径>",
+  thumbFile: "/path/cover.png"
+}
+```
+
+`article.md` 支持 frontmatter：
+
+```markdown
+---
+title: 文章标题
+---
+
+# 正文从这里开始
 
 ### 典型流程
 
@@ -90,8 +118,32 @@ wechat-mp-publish-status { publishId: "..." }      # 发布成功后拿文章链
 - `content`（HTML 字符串）与 `contentFile`（本地文件路径）**二选一**；整页 HTML 会自动抽 `<body>`。
 - `contentFile` 模式下，正文里的相对图片路径按**正文文件所在目录**解析。
 - `inlineImages`（缺省 `true`）：把 `<img src>` 里的外域 / 本地 / `data:` 图片上传成永久素材并改写地址；`mmbiz.qpic.cn` 的图片原样保留。图片已是公众号素材地址时可以关掉省调用。
-- 支持 `jpg/jpeg/png/gif/bmp`；`webp` 会被明确拒绝（微信按文件名后缀判类型，不做猜测转换）。
+- 支持 `jpg/jpeg/png/gif/bmp`；`webp` 在装了可选依赖 [sharp](https://github.com/lovell/sharp) 时**自动转 jpg**（quality 90），未安装时明确报错并提示 `bun add sharp`——转换不引入硬依赖，不装也不影响其他功能。
 - 封面三选一：`thumbMediaId`（已有素材）/ `thumbFile`（本地图片）/ `thumbUrl`（网络图片或本地路径），后两者自动上传为永久素材。
+
+## 多账号（V0.3.0）
+
+config 支持命名账号列表，token 缓存按账号隔离；全部工具接受可选 `account` 参数（缺省 = 第一个账号）：
+
+```yaml
+config:
+  accounts:
+    - name: main
+      appId: wxAAAAAAAAAAAAAAAA
+      secretRef: WECHAT_MP_MAIN_SECRET
+    - name: side-blog
+      appId: wxBBBBBBBBBBBBBBBB
+      secretRef: WECHAT_MP_SIDE_BLOG_SECRET   # 缺省按 name 派生
+```
+
+**向后兼容**：旧单账号 config（`appId` + `secretRef`）等价于一个名为 `default` 的账号，无需迁移；设置页继续编辑默认账号。凭据按账号各自的 `secretRef` 存。
+
+## webp 转换说明
+
+微信素材接口只认 jpg/png/gif/bmp 文件名后缀。插件在上传前侦测 webp（magic bytes / 扩展名 / content-type 三重）：
+
+- **装了 sharp**（`bun add sharp` 或 `npm i sharp`，可选 peerDependency）→ 自动转 jpg 后上传，正文图片与封面同样生效；
+- **没装** → 工具返回 `webp_convert_unavailable`，提示一次性安装 sharp 或手工转换，不会静默猜测。
 
 ## 错误码速查
 
@@ -111,16 +163,16 @@ wechat-mp-publish-status { publishId: "..." }      # 发布成功后拿文章链
 
 - 依赖 dsh 凭据服务（桌面 / web 组合默认自带 `credentials` 服务）；profile 若未挂载凭据提供方，插件不会激活。
 - **个人主体**：`freepublish`/群发等接口恒 `48001`（微信认证只对企业/组织开放）——草稿箱可用，发布只能人工在后台点。
-- 单账号：一次只配一个公众号 AppID（多账号请用多个 profile 或等待后续版本）。
+- webp 转换依赖可选的 sharp（未安装时明确报错，见上文）；其余格式不转码。
 - 只覆盖**文章域**：不做数据统计（`datacube`）、粉丝/菜单/自动回复、素材库管理、多平台分发。
-- 不做公众号 HTML 排版/样式渲染：正文由 agent 或调用方给 HTML（排版是另一层能力，后续按需立项）。
 
 ## 配置参考
 
 | 字段 | 缺省 | 说明 |
 |---|---|---|
-| `appId` | `''` | 公众号 AppID；空 = 凭据 `WECHAT_MP_APPID` |
-| `secretRef` | `WECHAT_MP_SECRET` | AppSecret 的凭据名（环境变量名形态） |
+| `accounts` | – | 命名账号列表 `[{ name, appId, secretRef }]`（见上文「多账号」） |
+| `appId` | `''` | 旧单账号形态：默认账号的 AppID；空 = 凭据 `WECHAT_MP_APPID` |
+| `secretRef` | `WECHAT_MP_SECRET` | 旧单账号形态：默认账号 AppSecret 的凭据名（环境变量名形态） |
 | `apiBase` | `https://api.weixin.qq.com` | 微信 API 基址（自建网关/测试时可覆盖） |
 | `timeoutMs` | `20000` | 单次 HTTP 超时（1s–120s） |
 | `maxImageBytes` | `10485760` | 单张图片上限（64KB–20MB；公众号素材上限 10MB） |
@@ -134,8 +186,7 @@ wechat-mp-publish-status { publishId: "..." }      # 发布成功后拿文章链
 ## 本地开发与测试
 
 ```bash
-cd packages/dsh-plugins/dsh-wechat-mp
-bun test          # 31 例 keyless：零网络、零真文件（fetch/readFile/时钟全注入）
+bun test          # keyless：零网络、零真文件（fetch/readFile/writeFile/时钟全注入）
 ```
 
 ## License
