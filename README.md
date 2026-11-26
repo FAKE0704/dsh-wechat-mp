@@ -163,7 +163,7 @@ config:
 插件向 skill 注册表注册两个 skill（kebab-case，model/user 均可调用；宿主没有 skill 子系统时自动跳过）：
 
 - **`wechat-mp-article`**（代码内置）：交付格式规范——「最终交付物 = 草稿箱草稿，不是本地 .md」、render → preview → 草稿标准链路、封面规则、message 取 mediaId 的读法。
-- **`article-writer`**（`skills/article-writer/`，monorepo 真源线并入）：暗色卡片排版规范——一段一卡片、内联样式 `<span>` 模板、色板约定；排版风格问题加载它，交付流程问题加载 `wechat-mp-article`。
+- **`write-article`**（`skills/write-article/`）：公众号长文写作规范——editorial 支柱骨架、语气合规、标题/导语硬指标；写稿问题加载它，交付流程问题加载 `wechat-mp-article`。
 
 ## V0.5.0 变更摘要
 

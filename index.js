@@ -15,9 +15,12 @@
 // AppID 可写 config.appId，缺省从凭据 WECHAT_MP_APPID 解析。secret/token 不进日志、
 // 不进工具结果、不落盘（token 仅进程内缓存）。
 
+import { readdirSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { createSemantics, decideWechatMpGate, resolveConfig } from './core.js'
 import { createSettingsService, WEB_PATH } from './settings.js'
-import { WECHAT_MP_SKILL_NAME, WECHAT_MP_SKILL_DESCRIPTION, WECHAT_MP_SKILL_WHEN_TO_USE, WECHAT_MP_SKILL_CONTENT, loadArticleWriterSkill } from './skill.js'
+import { WECHAT_MP_SKILL_NAME, WECHAT_MP_SKILL_DESCRIPTION, WECHAT_MP_SKILL_WHEN_TO_USE, WECHAT_MP_SKILL_CONTENT, loadBundledSkill } from './skill.js'
 
 export const name = 'dsh-wechat-mp'
 export const inject = ['tools', 'credentials']
@@ -204,16 +207,20 @@ export function apply(ctx, config) {
       source: 'bundled',
       content: WECHAT_MP_SKILL_CONTENT,
     }))
-    // article-writer：暗色卡片排版规范（一段一卡片 + 色板模板），文件在 skills/ 目录
-    // （DSH 扫描根不含包内 skills/，文件形态不可达，故同样运行时注册）。
-    const articleWriter = loadArticleWriterSkill()
-    if (articleWriter) {
-      ctx.effect(() => skills.register({
-        name: articleWriter.name,
-        description: articleWriter.description,
-        source: 'bundled',
-        content: articleWriter.content,
-      }))
+    // skills/ 目录下的文件形态 skill（DSH 扫描根不含包内 skills/，文件形态不可达，
+    // 故同样运行时注册；目录缺失/装载 null 时静默跳过）。
+    let bundledDirs = []
+    try { bundledDirs = readdirSync(join(dirname(fileURLToPath(import.meta.url)), 'skills')) } catch { /* 无 skills/ 目录 */ }
+    for (const dir of bundledDirs) {
+      const bundled = loadBundledSkill(dir)
+      if (bundled) {
+        ctx.effect(() => skills.register({
+          name: bundled.name,
+          description: bundled.description,
+          source: 'bundled',
+          content: bundled.content,
+        }))
+      }
     }
   }
 

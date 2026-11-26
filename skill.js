@@ -5,7 +5,7 @@
 // 这个 skill 把交付格式固化成模型可见的指令，随插件注册（ctx.skills.register），
 // 宿主没有 skill 服务时自动跳过，不影响工具面。
 //
-// 另有 monorepo 真源线带来的 skills/article-writer（暗色卡片排版规范，文件形态）：
+// 另有 skills/ 目录下的文件形态 skill（当前 = write-article，公众号长文写作规范）：
 // DSH 的 skill 扫描根不含 <包>/skills/，文件形态在 dsh 里不可达，所以这里一并做
 // 运行时注册（读包内文件，缺失/损坏时返回 null 跳过，不拖垮插件加载）。
 
@@ -57,12 +57,13 @@ export const WECHAT_MP_SKILL_CONTENT = `# 公众号文章交付规范（dsh-wech
 `
 
 /**
- * 读取 monorepo 带来的 article-writer 排版 skill（文件形态，apply 期同步读一次）。
+ * 读取包内 skills/<dir>/ 下的文件形态 skill（apply 期同步读一次）。
+ * @param {string} dir skills/ 下的子目录名
  * @returns {{name: string, description: string, content: string} | null} 文件缺失/无 frontmatter 时 null
  */
-export function loadArticleWriterSkill() {
+export function loadBundledSkill(dir) {
   try {
-    const base = join(dirname(fileURLToPath(import.meta.url)), 'skills', 'article-writer')
+    const base = join(dirname(fileURLToPath(import.meta.url)), 'skills', dir)
     const raw = readFileSync(join(base, 'SKILL.md'), 'utf8')
     const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(raw)
     if (!match) return null
