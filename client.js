@@ -390,9 +390,22 @@ window.__ModuleLoader__.load({
 .dshwmp-pv-meta { font-size: 12px; color: var(--dsw-alias-label-secondary); }
 .dshwmp-pv-badges { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex-shrink: 0; padding-top: 2px; }
 .dshwmp-pv-body { display: flex; gap: 14px; flex: 1 1 auto; min-height: 420px; flex-wrap: wrap; align-items: stretch; }
-.dshwmp-pv-canvas { flex: 1 1 420px; min-width: 300px; display: flex; justify-content: center; align-items: flex-start; overflow: auto; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 14px; padding: 24px 16px; }
-.dshwmp-pv-phone { width: 378px; max-width: 100%; height: 640px; background: #ffffff; border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px; box-shadow: 0 4px 18px rgba(0,0,0,0.10); overflow: hidden; }
-.dshwmp-pv-phone iframe { width: 100%; height: 100%; border: 0; display: block; }
+.dshwmp-pv-canvas { flex: 1 1 420px; min-width: 300px; display: flex; justify-content: center; align-items: flex-start; overflow: auto; background:
+  radial-gradient(1200px 500px at 50% -10%, color-mix(in srgb, var(--dsw-alias-brand-primary) 7%, transparent), transparent 60%),
+  var(--dsw-alias-bg-layer-2);
+  border: 1px solid var(--dsw-alias-border-l1); border-radius: 14px; padding: 36px 16px 44px; }
+/* iPhone 15 Pro：钛金属边框 + 灵动岛 + 侧键 */
+.dshwmp-pv-phone { position: relative; width: 400px; max-width: 100%; padding: 12px; border-radius: 54px;
+  background: linear-gradient(160deg, #4c4c52, #2c2c2e 42%, #1b1b1d);
+  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.10), inset 0 0 0 2px rgba(255, 255, 255, 0.05); }
+.dshwmp-pv-screen { position: relative; width: 376px; max-width: 100%; height: 648px; border-radius: 42px; overflow: hidden; background: #ffffff; }
+.dshwmp-pv-screen iframe { width: 100%; height: 100%; border: 0; display: block; }
+.dshwmp-pv-island { position: absolute; top: 11px; left: 50%; transform: translateX(-50%); width: 110px; height: 30px; border-radius: 999px; background: #000000; z-index: 2; }
+.dshwmp-pv-key { position: absolute; width: 3px; border-radius: 2px; background: linear-gradient(180deg, #3a3a3e, #232326); }
+.dshwmp-pv-key-action { left: -15px; top: 150px; height: 34px; }
+.dshwmp-pv-key-volup { left: -15px; top: 210px; height: 56px; }
+.dshwmp-pv-key-voldown { left: -15px; top: 278px; height: 56px; }
+.dshwmp-pv-key-power { right: -15px; top: 230px; height: 84px; }
 .dshwmp-pv-side { flex: 0 1 300px; min-width: 260px; display: flex; flex-direction: column; gap: 12px; overflow: auto; padding-bottom: 4px; }
 .dshwmp-pv-card { background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
 .dshwmp-pv-card-title { font-size: 12px; font-weight: 650; color: var(--dsw-alias-label-primary); letter-spacing: 0.02em; }
@@ -440,8 +453,6 @@ window.__ModuleLoader__.load({
         const [result, setResult] = useState(null) // { ok, text }
         const [confirmSend, setConfirmSend] = useState(false)
         const [drafts, setDrafts] = useState(null) // 草稿箱列表（用户点「拉取」后）
-        const [filePath, setFilePath] = useState('')
-        const [fileTitle, setFileTitle] = useState('')
 
         const refresh = useCallback(async () => {
           const res = await apiCall('preview')
@@ -509,28 +520,22 @@ window.__ModuleLoader__.load({
           }
         }
 
-        async function onLoadFile() {
-          const file = filePath.trim()
-          if (!file) return
-          setBusy('file')
-          try {
-            const res = await apiCall('loadFile', { file, title: fileTitle.trim() || undefined })
-            setResult({ ok: res.ok === true, text: res.ok ? String(res.message ?? '') : `${String(res.message ?? 'failed')}${res.hint ? `\n${res.hint}` : ''}` })
-            if (res.ok === true) await refresh()
-          } finally {
-            setBusy(null)
-          }
-        }
-
         const hasCover = Boolean(pv && (pv.thumbMediaId || pv.thumbFile || pv.thumbUrl))
         const sent = pv?.sent === true
 
         const badge = (cls, text) => h('span', { className: `dshwmp-badge ${cls}` }, text)
-        const frame = (pv2) => h('iframe', {
-          title: String(pv2.title ?? 'preview'),
-          sandbox: '', // 纯静态正文：禁脚本/表单，图片可显示
-          srcDoc: `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body style="margin:0;padding:20px 18px;font:15px/1.8 -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;color:#333;background:#fff;word-break:break-word;">${pv2.html ?? ''}</body></html>`,
-        })
+        const phone = (pv2) => h('div', { className: 'dshwmp-pv-phone' },
+          h('div', { className: 'dshwmp-pv-key dshwmp-pv-key-action' }),
+          h('div', { className: 'dshwmp-pv-key dshwmp-pv-key-volup' }),
+          h('div', { className: 'dshwmp-pv-key dshwmp-pv-key-voldown' }),
+          h('div', { className: 'dshwmp-pv-key dshwmp-pv-key-power' }),
+          h('div', { className: 'dshwmp-pv-screen' },
+            h('div', { className: 'dshwmp-pv-island', 'aria-hidden': true }),
+            h('iframe', {
+              title: String(pv2.title ?? 'preview'),
+              sandbox: '', // 纯静态正文：禁脚本/表单，图片可显示
+              srcDoc: `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body style="margin:0;padding:52px 18px 24px;font:15px/1.8 -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;color:#333;background:#fff;word-break:break-word;">${pv2.html ?? ''}</body></html>`,
+            })))
 
         const sideCard = (title, ...children) => h('div', { className: 'dshwmp-pv-card' },
           h('div', { className: 'dshwmp-pv-card-title' }, title), ...children)
@@ -549,20 +554,7 @@ window.__ModuleLoader__.load({
                   },
                     h('span', { className: 'dshwmp-pv-item-name' }, String(d.title || d.mediaId)),
                     h('span', { className: 'dshwmp-pv-item-time' }, String(d.updateTime ?? '').slice(0, 10)))))
-              : null,
-            h('div', { className: 'dshwmp-pv-divider' }),
-            h('div', { className: 'dshwmp-pv-row' },
-              h('input', {
-                'aria-label': t.t('previewFileLabel'), className: 'dshwmp-pv-input', value: filePath,
-                onChange: (e) => setFilePath(e.target.value), placeholder: t.t('previewFilePlaceholder'), autocomplete: 'off',
-              })),
-            h('div', { className: 'dshwmp-pv-row' },
-              h('input', {
-                'aria-label': t.t('previewFileTitle'), className: 'dshwmp-pv-input', value: fileTitle,
-                onChange: (e) => setFileTitle(e.target.value), placeholder: t.t('previewFileTitle'), autocomplete: 'off',
-              }),
-              h('button', { className: 'dshwmp-pv-btn', type: 'button', disabled: busy !== null || !filePath.trim(), onClick: () => { void onLoadFile() } },
-                busy === 'file' ? t.t('previewLoading') : t.t('previewFileLoad')))),
+              : null),
 
           sideCard(t.t('previewCoverLabel'),
             h('div', { className: 'dshwmp-pv-row' },
@@ -618,7 +610,7 @@ window.__ModuleLoader__.load({
           pv
             ? h('div', { className: 'dshwmp-pv-body' },
                 h('section', { className: 'dshwmp-pv-canvas', 'aria-label': String(pv.title ?? '') },
-                  h('div', { className: 'dshwmp-pv-phone' }, frame(pv))),
+                  phone(pv)),
                 side)
             : h('div', { className: 'dshwmp-pv-body' },
                 h('div', { className: 'dshwmp-pv-empty' },
