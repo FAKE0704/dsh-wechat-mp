@@ -162,7 +162,7 @@ config:
 
 插件向 skill 注册表注册两个 skill（kebab-case，model/user 均可调用；宿主没有 skill 子系统时自动跳过），**写公众号文章时两个都读**：
 
-- **`write-article`**（`skills/write-article/`）：内容与结构规范——editorial 支柱骨架、语气合规、标题/导语硬指标；`references/editorial.md` 已内联进 skill 正文（文末附录）；交付链含 CreatorStack 真源机与 DSH 环境两个分支。
+- **`write-article`**（`skills/write-article/`）：内容与结构规范——editorial 支柱骨架、语气合规、标题/导语硬指标；`references/editorial.md` 不内联正文，按「渐进阅读条件」用绝对路径按需精读（写新稿全文精读、改稿读 §4/§7、纯交付查 §5）；交付链含 CreatorStack 真源机与 DSH 环境两个分支。
 - **`wechat-mp-article`**（代码内置）：交付格式规范——「最终交付物 = 草稿箱草稿」、render → preview → 草稿标准链路、封面规则、message 取 mediaId 的读法。写稿问题先加载 `write-article`，交付链路问题加载本 skill。
 
 ## V0.5.0 变更摘要

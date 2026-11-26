@@ -219,6 +219,9 @@ export function apply(ctx, config) {
           description: bundled.description,
           source: 'bundled',
           content: bundled.content,
+          // 渐进注入：references/ 不内联正文，resourceBase 供宿主做资源定位指引，
+          // 文内资源索引已带绝对路径兜底
+          ...(bundled.resourceBase ? { resourceBase: bundled.resourceBase } : {}),
         }))
       }
     }

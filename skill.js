@@ -77,21 +77,31 @@ export function loadBundledSkill(dir) {
     }
     if (!meta.name || !meta.description) return null
     const body = raw.slice(match[0].length).trim()
-    // instructions.md（旧布局）裸拼；references/*.md 逐个作为附录内联——DSH 会话里模型
-    // 读不到真源机仓库路径（如 write-article 的 editorial.md），规范必须随 skill 进上下文。
+    // instructions.md（旧布局）裸拼。references/ 不内联正文，只注入「带绝对路径的资源
+    // 索引」：模型按 SKILL.md 声明的阅读条件用 read 工具按需精读（渐进注入），resourceBase
+    // 同时交给宿主做资源定位。全量内联会让每次写稿任务常驻全部参考材料，不值得。
     const parts = [body]
     try {
       parts.push(readFileSync(join(base, 'instructions.md'), 'utf8').trim())
     } catch { /* instructions.md 可选 */ }
+    const references = []
     try {
       const refs = readdirSync(join(base, 'references')).filter((f) => f.endsWith('.md')).sort()
       for (const ref of refs) {
-        parts.push(`---\n\n## 附录：references/${ref}（已随本 skill 内联，直接读这里，勿找仓库文件）\n\n${readFileSync(join(base, 'references', ref), 'utf8').trim()}`)
+        const rawRef = readFileSync(join(base, 'references', ref), 'utf8')
+        const heading = /^#\s+(.+)$/m.exec(rawRef)
+        const title = (heading ? heading[1] : ref).trim().slice(0, 60)
+        references.push({ file: `references/${ref}`, path: join(base, 'references', ref), title })
       }
     } catch { /* references/ 可选 */ }
+    if (references.length > 0) {
+      const lines = references.map((r) => `- \`${r.file}\` → ${r.path}（${r.title}）`)
+      parts.push(`## 资源索引（渐进注入：按正文声明的阅读条件用 read 工具精读对应文件，勿凭记忆复述）\n\n${lines.join('\n')}`)
+    }
     return {
       name: meta.name,
       description: meta.description,
+      ...(references.length > 0 ? { resourceBase: { kind: 'directory', path: base } } : {}),
       content: parts.filter(Boolean).join('\n\n'),
     }
   } catch {
