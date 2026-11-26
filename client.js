@@ -68,9 +68,8 @@ window.__ModuleLoader__.load({
         previewSendOkLead: '已推送到草稿箱（未发表）：',
         previewSendFail: '推送失败：',
         previewSentBadge: '已推送',
-        previewSourceLabel: '自己动手预览：从草稿箱拉取，或加载本地 Markdown / HTML 文件',
-        previewDraftFetch: '拉取草稿列表',
-        previewDraftFetching: '拉取中…',
+        previewDraftTitle: '草稿箱',
+        previewDraftSyncing: '正在同步草稿箱…',
         previewDraftEmpty: '草稿箱为空（或凭据/白名单未就绪）。',
         previewDraftLoad: (t) => `预览：${t}`,
         previewSource: (s) => `来源：${s}`,
@@ -128,9 +127,8 @@ window.__ModuleLoader__.load({
         previewSendOkLead: 'Pushed to the draft box (not published): ',
         previewSendFail: 'Send failed: ',
         previewSentBadge: 'Sent',
-        previewSourceLabel: 'Preview on your own: pull from the draft box, or load a local Markdown / HTML file',
-        previewDraftFetch: 'Fetch draft list',
-        previewDraftFetching: 'Fetching…',
+        previewDraftTitle: 'Draft box',
+        previewDraftSyncing: 'Syncing draft box…',
         previewDraftEmpty: 'Draft box is empty (or credentials / IP allowlist are not ready).',
         previewDraftLoad: (t) => `Preview: ${t}`,
         previewSource: (s) => `Source: ${s}`,
@@ -380,18 +378,18 @@ window.__ModuleLoader__.load({
   radial-gradient(1200px 500px at 50% -10%, color-mix(in srgb, var(--dsw-alias-brand-primary) 7%, transparent), transparent 60%),
   var(--dsw-alias-bg-layer-2);
   border: 1px solid var(--dsw-alias-border-l1); border-radius: 14px; padding: 36px 16px 44px; }
-/* iPhone 15 Pro：钛金属边框 + 灵动岛 + 侧键 */
-.dshwmp-pv-phone { position: relative; width: 400px; max-width: 100%; padding: 12px; border-radius: 54px;
+/* iPhone 15 Pro：比例≈19.5:9，细钛边框 + 灵动岛 + 侧键 */
+.dshwmp-pv-phone { position: relative; width: 380px; max-width: 100%; padding: 8px; border-radius: 52px;
   background: linear-gradient(160deg, #4c4c52, #2c2c2e 42%, #1b1b1d);
   box-shadow: 0 22px 48px rgba(0, 0, 0, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.10), inset 0 0 0 2px rgba(255, 255, 255, 0.05); }
-.dshwmp-pv-screen { position: relative; width: 376px; max-width: 100%; height: 648px; border-radius: 42px; overflow: hidden; background: #ffffff; }
+.dshwmp-pv-screen { position: relative; width: 364px; max-width: 100%; height: 782px; border-radius: 44px; overflow: hidden; background: #ffffff; }
 .dshwmp-pv-screen iframe { width: 100%; height: 100%; border: 0; display: block; }
-.dshwmp-pv-island { position: absolute; top: 11px; left: 50%; transform: translateX(-50%); width: 110px; height: 30px; border-radius: 999px; background: #000000; z-index: 2; }
+.dshwmp-pv-island { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); width: 96px; height: 26px; border-radius: 999px; background: #000000; z-index: 2; }
 .dshwmp-pv-key { position: absolute; width: 3px; border-radius: 2px; background: linear-gradient(180deg, #3a3a3e, #232326); }
-.dshwmp-pv-key-action { left: -15px; top: 150px; height: 34px; }
-.dshwmp-pv-key-volup { left: -15px; top: 210px; height: 56px; }
-.dshwmp-pv-key-voldown { left: -15px; top: 278px; height: 56px; }
-.dshwmp-pv-key-power { right: -15px; top: 230px; height: 84px; }
+.dshwmp-pv-key-action { left: -3px; top: 160px; height: 30px; }
+.dshwmp-pv-key-volup { left: -3px; top: 206px; height: 50px; }
+.dshwmp-pv-key-voldown { left: -3px; top: 266px; height: 50px; }
+.dshwmp-pv-key-power { right: -3px; top: 220px; height: 76px; }
 .dshwmp-pv-side { flex: 0 1 300px; min-width: 260px; display: flex; flex-direction: column; gap: 12px; overflow: auto; padding-bottom: 4px; }
 .dshwmp-pv-card { background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
 .dshwmp-pv-card-title { font-size: 12px; font-weight: 650; color: var(--dsw-alias-label-primary); letter-spacing: 0.02em; }
@@ -456,6 +454,17 @@ window.__ModuleLoader__.load({
           return () => clearInterval(timer)
         }, [refresh])
 
+        // 草稿箱自动同步：挂载拉一次 + 每 30 秒静默刷新（失败不打扰，列表保持上次结果）
+        const syncDrafts = useCallback(async () => {
+          const res = await apiCall('draftList', {})
+          if (res.ok === true) setDrafts(Array.isArray(res.items) ? res.items : [])
+        }, [])
+        useEffect(() => {
+          void syncDrafts()
+          const timer = setInterval(() => { void syncDrafts() }, 30_000)
+          return () => clearInterval(timer)
+        }, [syncDrafts])
+
         async function onSend() {
           if (!confirmSend) {
             setConfirmSend(true)
@@ -470,21 +479,6 @@ window.__ModuleLoader__.load({
               await refresh()
             } else {
               setResult({ ok: false, text: `${t.t('previewSendFail')}${String(res.message ?? 'failed')}` })
-            }
-          } finally {
-            setBusy(null)
-          }
-        }
-
-        async function onFetchDrafts() {
-          setBusy('drafts')
-          try {
-            const res = await apiCall('draftList', {})
-            if (res.ok === true) {
-              setDrafts(Array.isArray(res.items) ? res.items : [])
-              setResult({ ok: true, text: String(res.message ?? '') })
-            } else {
-              setResult({ ok: false, text: `${String(res.message ?? 'failed')}${res.hint ? `\n${res.hint}` : ''}` })
             }
           } finally {
             setBusy(null)
@@ -523,20 +517,17 @@ window.__ModuleLoader__.load({
           h('div', { className: 'dshwmp-pv-card-title' }, title), ...children)
 
         const side = h('aside', { className: 'dshwmp-pv-side', 'aria-label': t.t('previewSend') },
-          sideCard(t.t('previewSourceLabel'),
-            h('div', { className: 'dshwmp-pv-row' },
-              h('button', { className: 'dshwmp-pv-btn', type: 'button', disabled: busy !== null, onClick: () => { void onFetchDrafts() } },
-                busy === 'drafts' ? t.t('previewDraftFetching') : t.t('previewDraftFetch')),
-              Array.isArray(drafts) && drafts.length === 0 ? h('span', { className: 'dshwmp-pv-note' }, t.t('previewDraftEmpty')) : null),
+          sideCard(t.t('previewDraftTitle'),
+            Array.isArray(drafts) && drafts.length === 0 ? h('div', { className: 'dshwmp-pv-note' }, t.t('previewDraftEmpty')) : null,
             Array.isArray(drafts) && drafts.length > 0
-              ? h('div', { role: 'listbox', 'aria-label': t.t('previewDraftFetch') },
+              ? h('div', { role: 'listbox', 'aria-label': t.t('previewDraftTitle') },
                   drafts.map((d) => h('button', {
                     key: d.mediaId, className: 'dshwmp-pv-item', type: 'button', role: 'option', 'aria-selected': 'false',
                     disabled: busy !== null, onClick: () => { void onLoadDraft(d.mediaId, d.title) },
                   },
                     h('span', { className: 'dshwmp-pv-item-name' }, String(d.title || d.mediaId)),
                     h('span', { className: 'dshwmp-pv-item-time' }, String(d.updateTime ?? '').slice(0, 10)))))
-              : null),
+              : drafts === null ? h('div', { className: 'dshwmp-pv-note' }, t.t('previewDraftSyncing')) : null),
 
           sideCard(t.t('previewSend'),
             h('button', {
