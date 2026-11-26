@@ -366,12 +366,12 @@ window.__ModuleLoader__.load({
     // 预览页专属样式（独立于设置页的 dshwmp-*）：双栏 master-detail，
     // 左画布仿手机宽度、右栏 300px 操作列，窄屏自动折行。
     const PV_CSS = `
-.dshwmp-pv { display: flex; flex-direction: column; gap: 12px; height: 100%; min-height: 0; }
+.dshwmp-pv { display: flex; flex-direction: column; gap: 12px; height: 100%; min-height: 0; min-width: 0; overflow-x: hidden; }
 .dshwmp-pv-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .dshwmp-pv-title { font-size: 15px; font-weight: 650; color: var(--dsw-alias-label-primary); line-height: 1.45; margin: 0; }
 .dshwmp-pv-sub { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
 .dshwmp-pv-dot { width: 4px; height: 4px; border-radius: 999px; background: var(--dsw-alias-label-secondary); flex-shrink: 0; }
-.dshwmp-pv-meta { font-size: 12px; color: var(--dsw-alias-label-secondary); }
+.dshwmp-pv-meta { font-size: 12px; color: var(--dsw-alias-label-secondary); min-width: 0; overflow-wrap: anywhere; word-break: break-all; }
 .dshwmp-pv-badges { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex-shrink: 0; padding-top: 2px; }
 .dshwmp-pv-body { display: flex; gap: 14px; flex: 1 1 auto; min-height: 420px; flex-wrap: wrap; align-items: stretch; }
 .dshwmp-pv-canvas { flex: 1 1 420px; min-width: 300px; display: flex; justify-content: center; align-items: flex-start; overflow: auto; background:
@@ -500,6 +500,11 @@ window.__ModuleLoader__.load({
         const sent = pv?.sent === true
 
         const badge = (cls, text) => h('span', { className: `dshwmp-badge ${cls}` }, text)
+        // mediaId 等长串截短显示（完整值进 title tooltip），避免撑爆顶栏
+        const shortSource = (s) => {
+          const text = String(s ?? '')
+          return text.length > 34 ? `${text.slice(0, 16)}…${text.slice(-10)}` : text
+        }
         const phone = (pv2) => h('div', { className: 'dshwmp-pv-phone' },
           h('div', { className: 'dshwmp-pv-key dshwmp-pv-key-action' }),
           h('div', { className: 'dshwmp-pv-key dshwmp-pv-key-volup' }),
@@ -548,7 +553,7 @@ window.__ModuleLoader__.load({
             h('div', { style: { minWidth: 0 } },
               h('h2', { className: 'dshwmp-pv-title' }, pv ? String(pv.title ?? '') : t.t('previewSection')),
               h('div', { className: 'dshwmp-pv-sub' },
-                pv?.source ? h('span', { className: 'dshwmp-pv-meta' }, t.t('previewSource')(pv.source)) : null,
+                pv?.source ? h('span', { className: 'dshwmp-pv-meta', title: String(pv.source) }, t.t('previewSource')(shortSource(pv.source))) : null,
                 typeof pv?.chars === 'number' ? [
                   h('span', { className: 'dshwmp-pv-dot', key: 'd1' }),
                   h('span', { className: 'dshwmp-pv-meta', key: 'd2' }, t.t('previewChars')(pv.chars, ((pv.bytes ?? 0) / 1024).toFixed(1))),
