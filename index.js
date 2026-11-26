@@ -195,7 +195,7 @@ export function apply(ctx, config) {
       return res
     })
 
-  // ---------- 内置 skill：交付格式规范（V0.5.0） + article-writer 排版规范（monorepo 线并入） ----------
+  // ---------- 内置 skill：交付格式规范（V0.5.0） + skills/ 目录文件形态 skill（write-article 等） ----------
   // 经 ctx.get 惰性取 skill 服务：宿主没有 skill 子系统时自动跳过，不拖垮工具面。
   // runtime register 只需 name/description/invocation 合法；content 在加载时原样发给模型。
   const skills = ctx.get('skills')

@@ -1,6 +1,6 @@
 # dsh-wechat-mp
 
-微信公众号**文章**域 dsh 插件：在 dsh 会话里直接把文章推进公众号草稿箱、替换/删除草稿、提交发布并跟踪发布状态——十一个原生工具，**直连微信开放接口**，不依赖任何宿主平台（不需要 CreatorStack、不需要 MCP server、不需要额外后端）。
+微信公众号**文章**域 dsh 插件：在 dsh 会话里直接把文章推进公众号草稿箱、替换/删除草稿、提交发布并跟踪发布状态——十二个原生工具，**直连微信开放接口**，不依赖任何宿主平台（不需要 CreatorStack、不需要 MCP server、不需要额外后端）。
 
 本仓库（[FAKE0704/dsh-wechat-mp](https://github.com/FAKE0704/dsh-wechat-mp)）即真源：V0.3.0 起（渲染器/预检/多账号）直接在本仓开发发布，不再走 Genshu monorepo 真源→镜像链路。
 
@@ -158,12 +158,12 @@ config:
 - **装了 sharp** → 自动转 jpg（quality 90）后上传，正文图片与封面同样生效。V0.5.0 起 sharp 以 `optionalDependencies` 随包声明，`dsh plugin add` 安装包时一并装好（macOS/Linux/Windows 均有 N-API 预编译产物，无需编译）；
 - **没装**（如手工拷贝目录安装）→ 工具返回 `webp_convert_unavailable`，提示一次性安装 sharp 或手工转换，不会静默猜测。
 
-## 内置 skill：交付格式规范 + 排版规范（V0.5.0）
+## 内置 skill：交付格式规范 + 长文写作规范（V0.5.0）
 
-插件向 skill 注册表注册两个 skill（kebab-case，model/user 均可调用；宿主没有 skill 子系统时自动跳过）：
+插件向 skill 注册表注册两个 skill（kebab-case，model/user 均可调用；宿主没有 skill 子系统时自动跳过），**写公众号文章时两个都读**：
 
-- **`wechat-mp-article`**（代码内置）：交付格式规范——「最终交付物 = 草稿箱草稿，不是本地 .md」、render → preview → 草稿标准链路、封面规则、message 取 mediaId 的读法。
-- **`write-article`**（`skills/write-article/`）：公众号长文写作规范——editorial 支柱骨架、语气合规、标题/导语硬指标；写稿问题加载它，交付流程问题加载 `wechat-mp-article`。
+- **`write-article`**（`skills/write-article/`）：内容与结构规范——editorial 支柱骨架、语气合规、标题/导语硬指标；`references/editorial.md` 已内联进 skill 正文（文末附录）；交付链含 CreatorStack 真源机与 DSH 环境两个分支。
+- **`wechat-mp-article`**（代码内置）：交付格式规范——「最终交付物 = 草稿箱草稿」、render → preview → 草稿标准链路、封面规则、message 取 mediaId 的读法。写稿问题先加载 `write-article`，交付链路问题加载本 skill。
 
 ## V0.5.0 变更摘要
 

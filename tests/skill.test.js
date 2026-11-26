@@ -15,6 +15,21 @@ describe('loadBundledSkill（skills/ 目录文件形态 skill）', () => {
     expect(s.content.length).toBeGreaterThan(100)
   })
 
+  test('write-article：references 内联 + DSH 环境分支（拍板修改项 1/2）', () => {
+    const s = loadBundledSkill('write-article')
+    if (s === null) return
+    // editorial.md 原样收录进 references/，加载器要把它内联为附录——模型在 DSH 会话里
+    // 读不到真源机仓库，规范必须随 skill 进上下文
+    expect(s.content).toContain('附录：references/editorial.md')
+    expect(s.content).toContain('内容支柱')
+    // 交付链按环境二选一：DSH 分支走插件工具链，真源机命令标注不可用
+    expect(s.content).toContain('DSH 环境')
+    expect(s.content).toContain('wechat-mp-preview')
+    expect(s.content).toContain('不要尝试执行')
+    // 死引用已标注环境归属（拍板修改项 3，C1）
+    expect(s.content).toContain('wechat-mp-article')
+  })
+
   test('未知目录优雅 null', () => {
     expect(loadBundledSkill('no-such-dir')).toBe(null)
   })
@@ -23,5 +38,6 @@ describe('loadBundledSkill（skills/ 目录文件形态 skill）', () => {
     expect(WECHAT_MP_SKILL_NAME).toBe('wechat-mp-article')
     expect(WECHAT_MP_SKILL_DESCRIPTION.length).toBeGreaterThan(0)
     expect(WECHAT_MP_SKILL_CONTENT).toContain('wechat-mp-preview')
+    expect(WECHAT_MP_SKILL_CONTENT).toContain('write-article') // 分工互指（拍板修改项 5）
   })
 })

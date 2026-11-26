@@ -9,25 +9,28 @@
 // DSH 的 skill 扫描根不含 <包>/skills/，文件形态在 dsh 里不可达，所以这里一并做
 // 运行时注册（读包内文件，缺失/损坏时返回 null 跳过，不拖垮插件加载）。
 
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const WECHAT_MP_SKILL_NAME = 'wechat-mp-article'
 
 export const WECHAT_MP_SKILL_DESCRIPTION =
-  '写/改微信公众号文章的交付格式规范：最终交付物是公众号草稿箱里的草稿（预览页「推送到草稿箱」或 draft-create 的 media_id），不是本地 .md/.html 文件；标准链路 render → preview → 草稿。'
+  '写/改微信公众号文章的交付格式规范（内容/结构/语气规范见 write-article skill，写作任务两者配合读）：最终交付物是公众号草稿箱里的草稿（预览页「推送到草稿箱」或 draft-create 的 media_id），不是本地 .md/.html 文件；标准链路 render → preview → 草稿。'
 
 export const WECHAT_MP_SKILL_WHEN_TO_USE =
-  '用户要写、修改、排版公众号文章，或要求推草稿/预览公众号效果时加载。'
+  '交付链路问题（渲染/预览/推草稿/封面/mediaId/发布）加载本 skill；写稿的内容、结构、语气先读 write-article。'
 
 export const WECHAT_MP_SKILL_CONTENT = `# 公众号文章交付规范（dsh-wechat-mp）
+
+> 分工：**写什么/怎么写**（骨架、语气、合规）见同插件 skill \`write-article\`——写作任务两个都读；
+> 本 skill 只管**怎么交付**。
 
 ## 交付物定义
 
 完成态 = **公众号草稿箱里的草稿**（拿到 \`media_id\` 并向用户汇报），不是本地文件。
-\`.md\` 源稿和 render 出的 \`.html\` 都是**中间产物**，可以留在工作区供复改，但不能作为收尾——
-不要在写完 Markdown 后就停下交付。
+\`.md\` 源稿和 render 出的 \`.html\` 都是**中间产物**，可以留在工作区（或按 write-article 的约定落盘入库）供复改，
+但宣布完成前必须已经推进到草稿箱——不要在写完 Markdown 后就停下交付。
 
 ## 标准链路（按序）
 
@@ -74,14 +77,22 @@ export function loadBundledSkill(dir) {
     }
     if (!meta.name || !meta.description) return null
     const body = raw.slice(match[0].length).trim()
-    let instructions = ''
+    // instructions.md（旧布局）裸拼；references/*.md 逐个作为附录内联——DSH 会话里模型
+    // 读不到真源机仓库路径（如 write-article 的 editorial.md），规范必须随 skill 进上下文。
+    const parts = [body]
     try {
-      instructions = readFileSync(join(base, 'instructions.md'), 'utf8').trim()
+      parts.push(readFileSync(join(base, 'instructions.md'), 'utf8').trim())
     } catch { /* instructions.md 可选 */ }
+    try {
+      const refs = readdirSync(join(base, 'references')).filter((f) => f.endsWith('.md')).sort()
+      for (const ref of refs) {
+        parts.push(`---\n\n## 附录：references/${ref}（已随本 skill 内联，直接读这里，勿找仓库文件）\n\n${readFileSync(join(base, 'references', ref), 'utf8').trim()}`)
+      }
+    } catch { /* references/ 可选 */ }
     return {
       name: meta.name,
       description: meta.description,
-      content: instructions ? `${body}\n\n${instructions}` : body,
+      content: parts.filter(Boolean).join('\n\n'),
     }
   } catch {
     return null
