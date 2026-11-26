@@ -161,6 +161,31 @@ export function apply(ctx, config) {
     }),
     sem.render)
 
+  register('wechat-mp-preview',
+    '把文章推到 GUI 侧边栏「公众号 → 预览」页给用户审查（不发网络、不写草稿）。正文支持 Markdown（markdown/mdFile，自动渲染+预检）或 HTML（content/contentFile，自动预检）。推完提示用户在预览页审查正文与封面、点「推送到草稿箱」。给用户写公众号文章时的标准收尾：写完正文就调用本工具，不要直接 draft-create。免审。',
+    WITH_ACCOUNT({
+      title: { type: 'string', description: '文章标题（必填；Markdown 可由 frontmatter title 提供）' },
+      markdown: { type: 'string', description: 'Markdown 源文（字符串）；与 mdFile 二选一；与 content/contentFile 互斥' },
+      mdFile: { type: 'string', description: 'Markdown 文件路径；与 markdown 二选一，省上下文 token' },
+      content: { type: 'string', description: '正文 HTML 字符串；与 contentFile 二选一；与 markdown/mdFile 互斥' },
+      contentFile: { type: 'string', description: '正文 HTML 文件路径；与 content 二选一' },
+      author: { type: 'string', description: '作者署名（可选）' },
+      digest: { type: 'string', description: '摘要（可选，留空则用正文开头）' },
+      sourceUrl: { type: 'string', description: '原文链接（可选）' },
+      thumbMediaId: { type: 'string', description: '封面素材 id（可选；预览页可后补封面）' },
+      thumbFile: { type: 'string', description: '封面图片本地路径（可选；发送时自动上传永久素材）' },
+      thumbUrl: { type: 'string', description: '封面图片网络地址（可选）' },
+    }, ['title']),
+    async (args) => {
+      const res = await sem.preview(args)
+      if (res?.ok === true && typeof res.html === 'string' && res.html !== '') {
+        settings.pushPreview(res)
+        const { html: _stripped, ...summary } = res
+        return summary // 工具结果不带全文，正文只在预览页渲染
+      }
+      return res
+    })
+
   // ---------- V0.2.0：设置页 Web 桥（POST /api/dsh-wechat-mp，{ method, args }） ----------
   // 无 webServer 的宿主（如 headless）自动降级——工具面不受影响。
   const settings = createSettingsService({ ctx, config: cfg, makeSemantics: (merged) => createSemantics({

@@ -829,7 +829,73 @@ export function createSemantics(opts = {}) {
     })
   })
 
-  return { status, uploadImage: uploadImageTool, draftCreate, draftUpdate, draftList, draftDelete, publish, publishStatus, precheck, render }
+  // ---- V0.4.0 新工具：预览推送（渲染/预检通过后交 GUI 侧边栏，不发网络）----
+
+  const preview = guard(async (args) => {
+    const markdown = typeof args.markdown === 'string' && args.markdown.trim() ? args.markdown : ''
+    const mdFile = strArg(args.mdFile)
+    const hasMd = Boolean(markdown || mdFile)
+    const hasHtml = Boolean(strArg(args.content) || strArg(args.contentFile))
+    if (hasMd && hasHtml) {
+      throw new WechatMpError('bad_arg', 'markdown/mdFile 与 content/contentFile 只能给一组')
+    }
+    let html = ''
+    let title = strArg(args.title)
+    if (hasMd) {
+      let source = markdown
+      if (mdFile) {
+        const filePath = isAbsolute(mdFile) ? mdFile : resolvePath(process.cwd(), mdFile)
+        let raw
+        try {
+          raw = await readFile(filePath)
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          throw new WechatMpError('md_read_failed', `读取 Markdown 文件失败：${filePath}（${message}）`)
+        }
+        source = typeof raw === 'string' ? raw : Buffer.from(raw).toString('utf8')
+      }
+      const fm = extractFrontmatter(source)
+      title = title || fm.attrs.title || ''
+      if (!title) {
+        throw new WechatMpError('missing_title', '缺少标题：title 参数或 frontmatter 的 title 字段至少给一个', '公众号草稿标题必填')
+      }
+      html = renderMarkdown(source, { title })
+    } else {
+      if (!title) throw new WechatMpError('missing_title', '缺少标题 title', '公众号标题必填（建议 ≤24 字）')
+      const resolved = await resolveContent(args)
+      html = resolved.html
+    }
+    const body = extractBody(html)
+    if (!body) throw new WechatMpError('empty_content', '正文为空')
+    const report = precheckContent(body)
+    const errors = report.issues.filter((x) => x.level === 'error')
+    if (errors.length > 0) {
+      throw new WechatMpError('precheck_failed',
+        `正文预检未通过：${errors[0].message}`,
+        errors.map((x) => x.hint).filter(Boolean).join('；') || '按提示处置正文后重试')
+    }
+    const warns = report.issues.filter((x) => x.level === 'warn')
+    return success(`预览已推送到 GUI 侧边栏「公众号 → 预览」：${title}（${report.chars} 字符${warns.length ? `，${warns.length} 条警告` : ''}）。请在界面里审查正文与封面，确认后点「推送到草稿箱」。`, {
+      title,
+      html: body,
+      chars: report.chars,
+      bytes: report.bytes,
+      warnings: warns,
+      // 发送时要用到的草稿参数原样带给 GUI（封面缺失时用户可在预览页补）
+      author: strArg(args.author) || '',
+      digest: strArg(args.digest) || '',
+      sourceUrl: strArg(args.sourceUrl) || '',
+      thumbMediaId: strArg(args.thumbMediaId) || '',
+      thumbFile: strArg(args.thumbFile) || '',
+      thumbUrl: strArg(args.thumbUrl) || '',
+      account: strArg(args.account) || '',
+      inlineImages: args.inlineImages !== false,
+      needOpenComment: args.needOpenComment === true,
+      onlyFansCanComment: args.onlyFansCanComment === true,
+    })
+  })
+
+  return { status, uploadImage: uploadImageTool, draftCreate, draftUpdate, draftList, draftDelete, publish, publishStatus, precheck, render, preview }
 }
 
 /**

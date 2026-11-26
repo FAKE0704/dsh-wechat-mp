@@ -52,6 +52,27 @@ function normalizePatch(current, args) {
  */
 export function createSettingsService({ ctx, config, makeSemantics }) {
   let current = { ...config }
+  // 预览暂存区（进程内）：wechat-mp-preview 工具推入，GUI「预览」页拉取与发送。
+  // 只留最新一篇；html 不落盘、不进日志。
+  let previewState = null
+
+  function pushPreview(payload) {
+    previewState = {
+      ...(typeof payload === 'object' && payload !== null ? payload : {}),
+      pushedAt: new Date().toISOString(),
+      sent: false,
+      sentMediaId: '',
+      sentAt: '',
+    }
+    return previewState
+  }
+
+  async function rpcPreview() {
+    if (!previewState || typeof previewState.html !== 'string' || previewState.html === '') {
+      return { ok: true, empty: true, message: '暂无预览：让 agent 写完文章后调用 wechat-mp-preview' }
+    }
+    return { ok: true, empty: false, ...previewState }
+  }
 
   async function rpcGet() {
     let secretInfo = { configured: false }
@@ -142,12 +163,48 @@ export function createSettingsService({ ctx, config, makeSemantics }) {
     return sem.status()
   }
 
+  async function rpcSend(args) {
+    if (!previewState || typeof previewState.html !== 'string' || previewState.html === '') {
+      return { ok: false, message: '暂无待发送的预览：先在会话里让 agent 调用 wechat-mp-preview' }
+    }
+    if (previewState.sent) {
+      return { ok: false, message: `这篇预览已推送过草稿箱（media_id=${previewState.sentMediaId}，${previewState.sentAt}）；要重发请让 agent 重新调用 wechat-mp-preview` }
+    }
+    const cover = previewState.thumbMediaId || args?.thumbMediaId || previewState.thumbFile || args?.thumbFile || previewState.thumbUrl || args?.thumbUrl || ''
+    if (!cover) {
+      return { ok: false, message: '封面缺失：草稿接口必填封面。在预览页填「封面（本地路径 / 图片 URL / 素材 id 三选一）」后重试，或让 agent 重新预览时带 thumbFile/thumbUrl/thumbMediaId' }
+    }
+    const sem = makeSemantics({ ...current })
+    const res = await sem.draftCreate({
+      title: previewState.title,
+      content: previewState.html,
+      author: previewState.author || undefined,
+      digest: previewState.digest || undefined,
+      sourceUrl: previewState.sourceUrl || undefined,
+      thumbMediaId: args?.thumbMediaId || previewState.thumbMediaId || undefined,
+      thumbFile: args?.thumbFile || previewState.thumbFile || undefined,
+      thumbUrl: args?.thumbUrl || previewState.thumbUrl || undefined,
+      account: previewState.account || args?.account || undefined,
+      inlineImages: previewState.inlineImages !== false,
+      needOpenComment: previewState.needOpenComment === true,
+      onlyFansCanComment: previewState.onlyFansCanComment === true,
+    })
+    if (res?.ok === true && res.mediaId) {
+      previewState.sent = true
+      previewState.sentMediaId = String(res.mediaId)
+      previewState.sentAt = new Date().toISOString()
+    }
+    return res
+  }
+
   const METHODS = {
     get: rpcGet,
     save: rpcSave,
     setSecret: rpcSetSecret,
     clearSecret: rpcClearSecret,
     test: rpcTest,
+    preview: rpcPreview,
+    send: rpcSend,
   }
 
   function handleRequest(req, res) {
@@ -196,5 +253,5 @@ export function createSettingsService({ ctx, config, makeSemantics }) {
     })
   }
 
-  return { WEB_PATH, handleRequest, rpcInvoke: (method, args) => (METHODS[method] ?? (() => ({ ok: false, message: '未知方法' })))((args ?? {})) }
+  return { WEB_PATH, handleRequest, pushPreview, rpcInvoke: (method, args) => (METHODS[method] ?? (() => ({ ok: false, message: '未知方法' })))((args ?? {})) }
 }

@@ -49,6 +49,27 @@ window.__ModuleLoader__.load({
         testOk: '凭据可用（能换到 access_token）。',
         testFail: '凭据不可用：',
         testWarn: '测试返回异常：',
+        previewSection: '预览',
+        previewLead: 'agent 写完文章会自动把预览推到这里。审查正文与封面，没问题就点「推送到草稿箱」（只进草稿箱，不发表）。',
+        previewEmpty: '暂无待审查的预览。在会话里让 agent 写文章，写完它会调用 wechat-mp-preview 把预览推到这里。',
+        previewNone: '读取预览失败：',
+        previewRefresh: '刷新',
+        previewChars: (c, kb) => `${c} 字符 / ${kb}KB`,
+        previewWarn: (n) => `${n} 条警告`,
+        previewAuthor: (a) => `作者：${a}`,
+        previewDigest: (d) => `摘要：${d}`,
+        previewCoverMissing: '封面未提供',
+        previewCoverOk: '封面已提供',
+        previewCoverLabel: '封面（本地路径 / 图片 URL，发送时自动处理）',
+        previewCoverPlaceholder: '/path/to/cover.jpg 或 https://…',
+        previewCoverMediaId: '封面素材 id（可选，优先于上面两项）',
+        previewSend: '推送到草稿箱',
+        previewSendConfirm: '确认推送？',
+        previewSending: '推送中…',
+        previewSent: (id) => `已推送草稿箱：media_id=${id}`,
+        previewSendOkLead: '已推送到草稿箱（未发表）：',
+        previewSendFail: '推送失败：',
+        previewSentBadge: '已推送',
       },
       en: {
         section: "WeChat Official Account",
@@ -84,6 +105,27 @@ window.__ModuleLoader__.load({
         testOk: 'Credentials work (an access_token was obtained).',
         testFail: 'Credentials failed: ',
         testWarn: 'Test returned an error: ',
+        previewSection: 'Preview',
+        previewLead: "When the agent finishes an article it pushes a preview here. Review the body and cover, then click Send to drafts (draft box only, never published).",
+        previewEmpty: 'No preview waiting for review. Ask the agent to write an article; it calls wechat-mp-preview when done and the preview lands here.',
+        previewNone: 'Failed to load preview: ',
+        previewRefresh: 'Refresh',
+        previewChars: (c, kb) => `${c} chars / ${kb}KB`,
+        previewWarn: (n) => `${n} warning(s)`,
+        previewAuthor: (a) => `Author: ${a}`,
+        previewDigest: (d) => `Digest: ${d}`,
+        previewCoverMissing: 'No cover yet',
+        previewCoverOk: 'Cover provided',
+        previewCoverLabel: 'Cover (local path / image URL, resolved on send)',
+        previewCoverPlaceholder: '/path/to/cover.jpg or https://…',
+        previewCoverMediaId: 'Cover media_id (optional, takes priority)',
+        previewSend: 'Send to drafts',
+        previewSendConfirm: 'Confirm send?',
+        previewSending: 'Sending…',
+        previewSent: (id) => `Sent to drafts: media_id=${id}`,
+        previewSendOkLead: 'Pushed to the draft box (not published): ',
+        previewSendFail: 'Send failed: ',
+        previewSentBadge: 'Sent',
       },
     }
 
@@ -164,6 +206,10 @@ window.__ModuleLoader__.load({
 .dshwmp-result-ok { color: var(--dsw-alias-state-success-primary); }
 .dshwmp-result-bad { color: var(--dsw-alias-state-error-primary); }
 .dshwmp-note { font-size: 12px; color: var(--dsw-alias-label-secondary); overflow-wrap: anywhere; }
+.dshwmp-frame-wrap { border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; background: var(--dsw-alias-bg-layer-2); padding: 12px; display: flex; justify-content: center; }
+.dshwmp-frame { width: 378px; max-width: 100%; height: 520px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: #ffffff; }
+.dshwmp-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dshwmp-title { font-size: 14px; font-weight: 600; color: var(--dsw-alias-label-primary); line-height: 1.4; }
     `
 
     function makePage(ctx, t) {
@@ -311,6 +357,117 @@ window.__ModuleLoader__.load({
       return Page
     }
 
+    function makePreviewPage(ctx, t) {
+      const useLocaleTick = makeLocaleTick(ctx, t.refreshLang)
+
+      function PreviewPage() {
+        useLocaleTick()
+        const [pv, setPv] = useState(null) // 最新预览（含 html）
+        const [loadError, setLoadError] = useState('')
+        const [cover, setCover] = useState('')
+        const [coverMediaId, setCoverMediaId] = useState('')
+        const [busy, setBusy] = useState(null)
+        const [result, setResult] = useState(null) // { ok, text }
+        const [confirmSend, setConfirmSend] = useState(false)
+
+        const refresh = useCallback(async () => {
+          const res = await apiCall('preview')
+          if (res.ok === true) {
+            setPv(res.empty === true ? null : res)
+            setLoadError('')
+            setConfirmSend(false)
+          } else {
+            setLoadError(`${t.t('previewNone')}${String(res.message ?? 'failed')}`)
+          }
+        }, [t])
+
+        // 预览是 agent 推过来的：挂载期间轮询，写完文章几秒内自动出现
+        useEffect(() => {
+          void refresh()
+          const timer = setInterval(() => { void refresh() }, 4000)
+          return () => clearInterval(timer)
+        }, [refresh])
+
+        async function onSend() {
+          if (!confirmSend) {
+            setConfirmSend(true)
+            return
+          }
+          setConfirmSend(false)
+          setBusy('send')
+          try {
+            const res = await apiCall('send', { thumbFile: cover.trim() || undefined, thumbUrl: cover.trim() || undefined, thumbMediaId: coverMediaId.trim() || undefined })
+            if (res.ok === true) {
+              setResult({ ok: true, text: `${t.t('previewSendOkLead')}${String(res.message ?? t.t('previewSent')(String(res.mediaId ?? '')))}` })
+              setCover('')
+              setCoverMediaId('')
+              await refresh()
+            } else {
+              setResult({ ok: false, text: `${t.t('previewSendFail')}${String(res.message ?? 'failed')}` })
+            }
+          } finally {
+            setBusy(null)
+          }
+        }
+
+        const hasCover = Boolean(pv && (pv.thumbMediaId || pv.thumbFile || pv.thumbUrl))
+        const sent = pv?.sent === true
+        return h('div', { className: 'dshwmp' },
+          h('style', null, CSS),
+          h('div', { className: 'dshwmp-lead' }, t.t('previewLead')),
+          loadError
+            ? h('div', { className: 'dshwmp-result dshwmp-result-bad', role: 'alert' },
+                loadError,
+                h('button', { className: 'dshwmp-btn', type: 'button', onClick: () => { void refresh() } }, t.t('previewRefresh')))
+            : null,
+          !pv && !loadError
+            ? h('div', { className: 'dshwmp-result', role: 'status' }, t.t('previewEmpty'))
+            : null,
+          pv ? [
+            h('div', { className: 'dshwmp-card', key: 'meta' },
+              h('div', { className: 'dshwmp-meta' },
+                h('span', { className: 'dshwmp-title' }, String(pv.title ?? '')),
+                sent ? h('span', { className: 'dshwmp-badge dshwmp-badge-ok', role: 'status' }, t.t('previewSentBadge')) : null,
+                h('span', { className: `dshwmp-badge ${hasCover ? 'dshwmp-badge-ok' : 'dshwmp-badge-bad'}` }, hasCover ? t.t('previewCoverOk') : t.t('previewCoverMissing')),
+                typeof pv.chars === 'number' ? h('span', { className: 'dshwmp-badge dshwmp-badge-neutral' }, t.t('previewChars')(pv.chars, ((pv.bytes ?? 0) / 1024).toFixed(1))) : null,
+                Array.isArray(pv.warnings) && pv.warnings.length > 0 ? h('span', { className: 'dshwmp-badge dshwmp-badge-bad' }, t.t('previewWarn')(pv.warnings.length)) : null),
+              pv.author ? h('div', { className: 'dshwmp-note' }, t.t('previewAuthor')(pv.author)) : null,
+              pv.digest ? h('div', { className: 'dshwmp-note' }, t.t('previewDigest')(pv.digest)) : null),
+
+            h('div', { className: 'dshwmp-frame-wrap', key: 'body' },
+              h('iframe', {
+                className: 'dshwmp-frame', title: String(pv.title ?? 'preview'),
+                sandbox: '', // 纯静态正文：禁脚本/表单，图片可显示
+                srcDoc: `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body style="margin:0;padding:16px;font:15px/1.75 -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;color:#333;background:#fff;word-break:break-word;">${pv.html ?? ''}</body></html>`,
+              })),
+
+            h('div', { className: 'dshwmp-card', key: 'send' },
+              h('div', { className: 'dshwmp-head' },
+                h('label', { className: 'dshwmp-label', htmlFor: 'dshwmp-cover' }, t.t('previewCoverLabel')),
+                h('input', {
+                  id: 'dshwmp-cover', className: 'dshwmp-input', value: cover,
+                  onChange: (e) => setCover(e.target.value), placeholder: t.t('previewCoverPlaceholder'), autocomplete: 'off',
+                })),
+              h('div', { className: 'dshwmp-head' },
+                h('label', { className: 'dshwmp-label', htmlFor: 'dshwmp-cover-mid' }, t.t('previewCoverMediaId')),
+                h('input', {
+                  id: 'dshwmp-cover-mid', className: 'dshwmp-input', value: coverMediaId,
+                  onChange: (e) => setCoverMediaId(e.target.value), placeholder: 'thumb_media_id', autocomplete: 'off',
+                })),
+              h('div', { className: 'dshwmp-head' },
+                h('button', {
+                  className: `dshwmp-btn ${confirmSend ? 'dshwmp-btn-danger' : ''}`, type: 'button',
+                  disabled: busy !== null || sent, onClick: () => { void onSend() },
+                }, busy === 'send' ? t.t('previewSending') : confirmSend ? t.t('previewSendConfirm') : t.t('previewSend'))),
+              sent ? h('div', { className: 'dshwmp-note' }, t.t('previewSent')(String(pv.sentMediaId ?? ''))) : null),
+
+            h('div', { className: `dshwmp-result ${result ? (result.ok ? 'dshwmp-result-ok' : 'dshwmp-result-bad') : ''}`, key: 'result', role: 'status' },
+              result ? result.text : t.t('previewLead')),
+          ] : null)
+      }
+      return PreviewPage
+    }
+
     function SectionIcon(props) {
       const size = typeof props?.size === 'number' ? props.size : 16
       return h('svg', {
@@ -323,14 +480,32 @@ window.__ModuleLoader__.load({
         h('path', { d: 'M7 9.5h7M7 12.5h5' }))
     }
 
+    function PreviewIcon(props) {
+      const size = typeof props?.size === 'number' ? props.size : 16
+      return h('svg', {
+        width: size, height: size, viewBox: '0 0 24 24', fill: 'none',
+        stroke: 'currentColor', strokeWidth: 1.7, strokeLinecap: 'round', strokeLinejoin: 'round',
+        'aria-hidden': true,
+      },
+        h('path', { d: 'M3 12s3.2-5.5 9-5.5S21 12 21 12s-3.2 5.5-9 5.5S3 12 3 12z' }),
+        h('circle', { cx: 12, cy: 12, r: 2.6 }))
+    }
+
     return {
       inject: ['slots', 'locale'],
       apply(ctx) {
         const t = makeT(ctx)
         const Page = makePage(ctx, t)
+        const PreviewPage = makePreviewPage(ctx, t)
+        ctx.slots.inject('settings.section', () => ctx.slots.register({
+          name: 'settings.section', id: 'dsh-wechat-mp-preview', order: 64, label: () => t.t('previewSection'),
+        }, PreviewPage))
         ctx.slots.inject('settings.section', () => ctx.slots.register({
           name: 'settings.section', id: 'dsh-wechat-mp', order: 65, label: () => t.t('section'),
         }, Page))
+        ctx.slots.inject('settings.section.icon', () => ctx.slots.register({
+          name: 'settings.section.icon', id: 'dsh-wechat-mp-preview',
+        }, PreviewIcon))
         ctx.slots.inject('settings.section.icon', () => ctx.slots.register({
           name: 'settings.section.icon', id: 'dsh-wechat-mp',
         }, SectionIcon))

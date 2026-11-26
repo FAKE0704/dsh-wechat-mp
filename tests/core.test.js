@@ -263,3 +263,38 @@ describe('渲染器工具（文件读写注入）', () => {
     expect(written).toBe(null)
   })
 })
+
+describe('预览推送工具（不发网络、不落盘）', () => {
+  test('markdown → 预检通过，返回 html 与草稿参数透传', async () => {
+    const sem = createSemantics({ config: resolveConfig({}) })
+    const r = await sem.preview({ markdown: '# 标题\n\n正文 **加粗**', title: '预览文', author: '甲', thumbFile: '/tmp/c.jpg' })
+    expect(r.ok).toBe(true)
+    expect(r.title).toBe('预览文')
+    expect(r.html).toContain('<h1')
+    expect(r.author).toBe('甲')
+    expect(r.thumbFile).toBe('/tmp/c.jpg')
+    expect(r.chars).toBeGreaterThan(0)
+  })
+
+  test('HTML 正文路径 + 无标题拒绝 + markdown/HTML 互斥', async () => {
+    const sem = createSemantics({ config: resolveConfig({}), readFileImpl: async () => '<p>来自文件</p>' })
+    const ok = await sem.preview({ contentFile: '/tmp/a.html', title: 'T' })
+    expect(ok.ok).toBe(true)
+    expect(ok.html).toContain('来自文件')
+
+    const noTitle = await sem.preview({ content: '<p>x</p>' })
+    expect(noTitle.ok).toBe(false)
+    expect(noTitle.code).toBe('missing_title')
+
+    const both = await sem.preview({ markdown: '# t\n\nx', content: '<p>x</p>', title: 'T' })
+    expect(both.ok).toBe(false)
+    expect(both.code).toBe('bad_arg')
+  })
+
+  test('超限正文 → precheck_failed', async () => {
+    const sem = createSemantics({ config: resolveConfig({}) })
+    const r = await sem.preview({ content: `<p>${'字'.repeat(PRECHECK_MAX_CHARS + 10)}</p>`, title: 't' })
+    expect(r.ok).toBe(false)
+    expect(r.code).toBe('precheck_failed')
+  })
+})
