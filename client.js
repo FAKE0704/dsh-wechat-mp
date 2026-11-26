@@ -379,6 +379,54 @@ window.__ModuleLoader__.load({
       return Page
     }
 
+    // 预览页专属样式（独立于设置页的 dshwmp-*）：双栏 master-detail，
+    // 左画布仿手机宽度、右栏 300px 操作列，窄屏自动折行。
+    const PV_CSS = `
+.dshwmp-pv { display: flex; flex-direction: column; gap: 12px; height: 100%; min-height: 0; }
+.dshwmp-pv-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.dshwmp-pv-title { font-size: 15px; font-weight: 650; color: var(--dsw-alias-label-primary); line-height: 1.45; margin: 0; }
+.dshwmp-pv-sub { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.dshwmp-pv-dot { width: 4px; height: 4px; border-radius: 999px; background: var(--dsw-alias-label-secondary); flex-shrink: 0; }
+.dshwmp-pv-meta { font-size: 12px; color: var(--dsw-alias-label-secondary); }
+.dshwmp-pv-badges { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex-shrink: 0; padding-top: 2px; }
+.dshwmp-pv-body { display: flex; gap: 14px; flex: 1 1 auto; min-height: 420px; flex-wrap: wrap; align-items: stretch; }
+.dshwmp-pv-canvas { flex: 1 1 420px; min-width: 300px; display: flex; justify-content: center; align-items: flex-start; overflow: auto; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 14px; padding: 24px 16px; }
+.dshwmp-pv-phone { width: 378px; max-width: 100%; height: 640px; background: #ffffff; border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px; box-shadow: 0 4px 18px rgba(0,0,0,0.10); overflow: hidden; }
+.dshwmp-pv-phone iframe { width: 100%; height: 100%; border: 0; display: block; }
+.dshwmp-pv-side { flex: 0 1 300px; min-width: 260px; display: flex; flex-direction: column; gap: 12px; overflow: auto; padding-bottom: 4px; }
+.dshwmp-pv-card { background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.dshwmp-pv-card-title { font-size: 12px; font-weight: 650; color: var(--dsw-alias-label-primary); letter-spacing: 0.02em; }
+.dshwmp-pv-row { display: flex; align-items: center; gap: 8px; }
+.dshwmp-pv-input { flex: 1 1 auto; min-width: 120px; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); font-size: 12px; font-family: inherit; }
+.dshwmp-pv-input:focus { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 1px; }
+.dshwmp-pv-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid transparent; background: transparent; color: var(--dsw-alias-label-primary); font-size: 13px; font-family: inherit; cursor: pointer; text-align: left; }
+.dshwmp-pv-item:hover { background: var(--dsw-alias-bg-overlay); }
+.dshwmp-pv-item:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 1px; }
+.dshwmp-pv-item[disabled] { opacity: 0.5; cursor: not-allowed; }
+.dshwmp-pv-item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dshwmp-pv-item-time { flex-shrink: 0; font-size: 11px; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
+.dshwmp-pv-divider { height: 1px; background: var(--dsw-alias-border-l1); margin: 2px 0; }
+.dshwmp-pv-btn { padding: 7px 12px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font-size: 12px; font-family: inherit; cursor: pointer; white-space: nowrap; }
+.dshwmp-pv-btn:hover { background: var(--dsw-alias-bg-overlay); }
+.dshwmp-pv-btn:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 2px; }
+.dshwmp-pv-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.dshwmp-pv-btn-primary { background: var(--dsw-alias-brand-primary); border-color: var(--dsw-alias-brand-primary); color: #ffffff; font-weight: 600; }
+.dshwmp-pv-btn-primary:hover { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 88%, #000000); }
+.dshwmp-pv-btn-danger { background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 14%, var(--dsw-alias-bg-layer-1)); border-color: var(--dsw-alias-state-error-primary); color: var(--dsw-alias-state-error-primary); font-weight: 600; }
+.dshwmp-pv-note { font-size: 11px; color: var(--dsw-alias-label-secondary); line-height: 1.5; overflow-wrap: anywhere; }
+.dshwmp-pv-msg { font-size: 12px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; border-radius: 8px; padding: 8px 10px; border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-secondary); }
+.dshwmp-pv-msg-ok { color: var(--dsw-alias-state-success-primary); border-color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 35%, transparent); }
+.dshwmp-pv-msg-bad { color: var(--dsw-alias-state-error-primary); border-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 35%, transparent); }
+.dshwmp-pv-empty { flex: 1 1 420px; min-width: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: var(--dsw-alias-bg-layer-2); border: 1px dashed var(--dsw-alias-border-l2); border-radius: 14px; color: var(--dsw-alias-label-secondary); text-align: center; padding: 32px 24px; }
+.dshwmp-pv-empty svg { opacity: 0.45; }
+.dshwmp-pv-empty-title { font-size: 13px; font-weight: 600; color: var(--dsw-alias-label-primary); }
+.dshwmp-pv-empty-hint { font-size: 12px; max-width: 340px; line-height: 1.6; }
+@media (prefers-reduced-motion: no-preference) {
+  .dshwmp-pv-phone { animation: dshwmp-pv-in 160ms ease-out; }
+  @keyframes dshwmp-pv-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+}
+    `
+
     function makePreviewPage(ctx, t) {
       const useLocaleTick = makeLocaleTick(ctx, t.refreshLang)
 
@@ -476,90 +524,110 @@ window.__ModuleLoader__.load({
 
         const hasCover = Boolean(pv && (pv.thumbMediaId || pv.thumbFile || pv.thumbUrl))
         const sent = pv?.sent === true
-        return h('div', { className: 'dshwmp' },
-          h('style', null, CSS),
-          h('div', { className: 'dshwmp-lead' }, t.t('previewLead')),
-          loadError
-            ? h('div', { className: 'dshwmp-result dshwmp-result-bad', role: 'alert' },
-                loadError,
-                h('button', { className: 'dshwmp-btn', type: 'button', onClick: () => { void refresh() } }, t.t('previewRefresh')))
-            : null,
-          !pv && !loadError
-            ? h('div', { className: 'dshwmp-result', role: 'status' }, t.t('previewEmpty'))
-            : null,
-          h('div', { className: 'dshwmp-card', key: 'source' },
-            h('div', { className: 'dshwmp-note' }, t.t('previewSourceLabel')),
-            h('div', { className: 'dshwmp-head' },
-              h('button', { className: 'dshwmp-btn', type: 'button', disabled: busy !== null, onClick: () => { void onFetchDrafts() } },
+
+        const badge = (cls, text) => h('span', { className: `dshwmp-badge ${cls}` }, text)
+        const frame = (pv2) => h('iframe', {
+          title: String(pv2.title ?? 'preview'),
+          sandbox: '', // 纯静态正文：禁脚本/表单，图片可显示
+          srcDoc: `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body style="margin:0;padding:20px 18px;font:15px/1.8 -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;color:#333;background:#fff;word-break:break-word;">${pv2.html ?? ''}</body></html>`,
+        })
+
+        const sideCard = (title, ...children) => h('div', { className: 'dshwmp-pv-card' },
+          h('div', { className: 'dshwmp-pv-card-title' }, title), ...children)
+
+        const side = h('aside', { className: 'dshwmp-pv-side', 'aria-label': t.t('previewSend') },
+          sideCard(t.t('previewSourceLabel'),
+            h('div', { className: 'dshwmp-pv-row' },
+              h('button', { className: 'dshwmp-pv-btn', type: 'button', disabled: busy !== null, onClick: () => { void onFetchDrafts() } },
                 busy === 'drafts' ? t.t('previewDraftFetching') : t.t('previewDraftFetch')),
-              Array.isArray(drafts) && drafts.length === 0 ? h('span', { className: 'dshwmp-hint' }, t.t('previewDraftEmpty')) : null),
+              Array.isArray(drafts) && drafts.length === 0 ? h('span', { className: 'dshwmp-pv-note' }, t.t('previewDraftEmpty')) : null),
             Array.isArray(drafts) && drafts.length > 0
               ? h('div', { role: 'listbox', 'aria-label': t.t('previewDraftFetch') },
                   drafts.map((d) => h('button', {
-                    key: d.mediaId, className: 'dshwmp-btn', type: 'button', role: 'option',
-                    'aria-selected': 'false', disabled: busy !== null,
-                    style: { width: '100%', textAlign: 'left', display: 'flex', justifyContent: 'space-between', gap: 8 },
-                    onClick: () => { void onLoadDraft(d.mediaId, d.title) },
+                    key: d.mediaId, className: 'dshwmp-pv-item', type: 'button', role: 'option', 'aria-selected': 'false',
+                    disabled: busy !== null, onClick: () => { void onLoadDraft(d.mediaId, d.title) },
                   },
-                    h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, String(d.title || d.mediaId)),
-                    h('span', { style: { flexShrink: 0, opacity: 0.7 } }, String(d.updateTime ?? '').slice(0, 10)))))
+                    h('span', { className: 'dshwmp-pv-item-name' }, String(d.title || d.mediaId)),
+                    h('span', { className: 'dshwmp-pv-item-time' }, String(d.updateTime ?? '').slice(0, 10)))))
               : null,
-            h('div', { className: 'dshwmp-head' },
-              h('label', { className: 'dshwmp-label', htmlFor: 'dshwmp-file' }, t.t('previewFileLabel')),
+            h('div', { className: 'dshwmp-pv-divider' }),
+            h('div', { className: 'dshwmp-pv-row' },
               h('input', {
-                id: 'dshwmp-file', className: 'dshwmp-input', value: filePath,
+                'aria-label': t.t('previewFileLabel'), className: 'dshwmp-pv-input', value: filePath,
                 onChange: (e) => setFilePath(e.target.value), placeholder: t.t('previewFilePlaceholder'), autocomplete: 'off',
               })),
-            h('div', { className: 'dshwmp-head' },
-              h('label', { className: 'dshwmp-label', htmlFor: 'dshwmp-file-title' }, t.t('previewFileTitle')),
+            h('div', { className: 'dshwmp-pv-row' },
               h('input', {
-                id: 'dshwmp-file-title', className: 'dshwmp-input', value: fileTitle,
-                onChange: (e) => setFileTitle(e.target.value), autocomplete: 'off',
+                'aria-label': t.t('previewFileTitle'), className: 'dshwmp-pv-input', value: fileTitle,
+                onChange: (e) => setFileTitle(e.target.value), placeholder: t.t('previewFileTitle'), autocomplete: 'off',
               }),
-              h('button', { className: 'dshwmp-btn', type: 'button', disabled: busy !== null || !filePath.trim(), onClick: () => { void onLoadFile() } },
+              h('button', { className: 'dshwmp-pv-btn', type: 'button', disabled: busy !== null || !filePath.trim(), onClick: () => { void onLoadFile() } },
                 busy === 'file' ? t.t('previewLoading') : t.t('previewFileLoad')))),
-          pv ? [
-            h('div', { className: 'dshwmp-card', key: 'meta' },
-              h('div', { className: 'dshwmp-meta' },
-                h('span', { className: 'dshwmp-title' }, String(pv.title ?? '')),
-                sent ? h('span', { className: 'dshwmp-badge dshwmp-badge-ok', role: 'status' }, t.t('previewSentBadge')) : null,
-                h('span', { className: `dshwmp-badge ${hasCover ? 'dshwmp-badge-ok' : 'dshwmp-badge-bad'}` }, hasCover ? t.t('previewCoverOk') : t.t('previewCoverMissing')),
-                typeof pv.chars === 'number' ? h('span', { className: 'dshwmp-badge dshwmp-badge-neutral' }, t.t('previewChars')(pv.chars, ((pv.bytes ?? 0) / 1024).toFixed(1))) : null,
-                Array.isArray(pv.warnings) && pv.warnings.length > 0 ? h('span', { className: 'dshwmp-badge dshwmp-badge-bad' }, t.t('previewWarn')(pv.warnings.length)) : null),
-              pv.author ? h('div', { className: 'dshwmp-note' }, t.t('previewAuthor')(pv.author)) : null,
-              pv.digest ? h('div', { className: 'dshwmp-note' }, t.t('previewDigest')(pv.digest)) : null,
-              pv.source ? h('div', { className: 'dshwmp-note' }, t.t('previewSource')(pv.source)) : null),
 
-            h('div', { className: 'dshwmp-frame-wrap', key: 'body' },
-              h('iframe', {
-                className: 'dshwmp-frame', title: String(pv.title ?? 'preview'),
-                sandbox: '', // 纯静态正文：禁脚本/表单，图片可显示
-                srcDoc: `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body style="margin:0;padding:16px;font:15px/1.75 -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;color:#333;background:#fff;word-break:break-word;">${pv.html ?? ''}</body></html>`,
+          sideCard(t.t('previewCoverLabel'),
+            h('div', { className: 'dshwmp-pv-row' },
+              h('input', {
+                'aria-label': t.t('previewCoverLabel'), className: 'dshwmp-pv-input', value: cover,
+                onChange: (e) => setCover(e.target.value), placeholder: t.t('previewCoverPlaceholder'), autocomplete: 'off',
               })),
+            h('div', { className: 'dshwmp-pv-row' },
+              h('input', {
+                'aria-label': t.t('previewCoverMediaId'), className: 'dshwmp-pv-input', value: coverMediaId,
+                onChange: (e) => setCoverMediaId(e.target.value), placeholder: 'thumb_media_id', autocomplete: 'off',
+              })),
+            h('button', {
+              className: `dshwmp-pv-btn dshwmp-pv-btn-primary ${confirmSend ? 'dshwmp-pv-btn-danger' : ''}`, type: 'button',
+              disabled: busy !== null || sent, style: { width: '100%', padding: '9px 12px' }, onClick: () => { void onSend() },
+            }, busy === 'send' ? t.t('previewSending') : confirmSend ? t.t('previewSendConfirm') : t.t('previewSend')),
+            sent ? h('div', { className: 'dshwmp-pv-note' }, t.t('previewSent')(String(pv.sentMediaId ?? ''))) : null),
 
-            h('div', { className: 'dshwmp-card', key: 'send' },
-              h('div', { className: 'dshwmp-head' },
-                h('label', { className: 'dshwmp-label', htmlFor: 'dshwmp-cover' }, t.t('previewCoverLabel')),
-                h('input', {
-                  id: 'dshwmp-cover', className: 'dshwmp-input', value: cover,
-                  onChange: (e) => setCover(e.target.value), placeholder: t.t('previewCoverPlaceholder'), autocomplete: 'off',
-                })),
-              h('div', { className: 'dshwmp-head' },
-                h('label', { className: 'dshwmp-label', htmlFor: 'dshwmp-cover-mid' }, t.t('previewCoverMediaId')),
-                h('input', {
-                  id: 'dshwmp-cover-mid', className: 'dshwmp-input', value: coverMediaId,
-                  onChange: (e) => setCoverMediaId(e.target.value), placeholder: 'thumb_media_id', autocomplete: 'off',
-                })),
-              h('div', { className: 'dshwmp-head' },
-                h('button', {
-                  className: `dshwmp-btn ${confirmSend ? 'dshwmp-btn-danger' : ''}`, type: 'button',
-                  disabled: busy !== null || sent, onClick: () => { void onSend() },
-                }, busy === 'send' ? t.t('previewSending') : confirmSend ? t.t('previewSendConfirm') : t.t('previewSend'))),
-              sent ? h('div', { className: 'dshwmp-note' }, t.t('previewSent')(String(pv.sentMediaId ?? ''))) : null),
+          result
+            ? h('div', { className: `dshwmp-pv-msg ${result.ok ? 'dshwmp-pv-msg-ok' : 'dshwmp-pv-msg-bad'}`, role: 'status' }, result.text)
+            : null)
 
-            h('div', { className: `dshwmp-result ${result ? (result.ok ? 'dshwmp-result-ok' : 'dshwmp-result-bad') : ''}`, key: 'result', role: 'status' },
-              result ? result.text : t.t('previewLead')),
-          ] : null)
+        return h('div', { className: 'dshwmp-pv' },
+          h('style', null, PV_CSS),
+
+          h('header', { className: 'dshwmp-pv-head' },
+            h('div', { style: { minWidth: 0 } },
+              h('h2', { className: 'dshwmp-pv-title' }, pv ? String(pv.title ?? '') : t.t('previewSection')),
+              h('div', { className: 'dshwmp-pv-sub' },
+                pv?.source ? h('span', { className: 'dshwmp-pv-meta' }, t.t('previewSource')(pv.source)) : null,
+                typeof pv?.chars === 'number' ? [
+                  h('span', { className: 'dshwmp-pv-dot', key: 'd1' }),
+                  h('span', { className: 'dshwmp-pv-meta', key: 'd2' }, t.t('previewChars')(pv.chars, ((pv.bytes ?? 0) / 1024).toFixed(1))),
+                ] : null,
+                pv?.author ? [
+                  h('span', { className: 'dshwmp-pv-dot', key: 'd3' }),
+                  h('span', { className: 'dshwmp-pv-meta', key: 'd4' }, t.t('previewAuthor')(pv.author)),
+                ] : null,
+                Array.isArray(pv?.warnings) && pv.warnings.length > 0 ? [
+                  h('span', { className: 'dshwmp-pv-dot', key: 'd5' }),
+                  h('span', { className: 'dshwmp-pv-meta', key: 'd6', style: { color: 'var(--dsw-alias-state-error-primary)' } }, t.t('previewWarn')(pv.warnings.length)),
+                ] : null)),
+            pv ? h('div', { className: 'dshwmp-pv-badges' },
+              sent ? badge('dshwmp-badge-ok', t.t('previewSentBadge')) : null,
+              badge(hasCover ? 'dshwmp-badge-ok' : 'dshwmp-badge-bad', hasCover ? t.t('previewCoverOk') : t.t('previewCoverMissing'))) : null),
+
+          loadError
+            ? h('div', { className: 'dshwmp-pv-msg dshwmp-pv-msg-bad', role: 'alert' },
+                loadError,
+                h('button', { className: 'dshwmp-pv-btn', type: 'button', style: { marginLeft: 8 }, onClick: () => { void refresh() } }, t.t('previewRefresh')))
+            : null,
+
+          pv
+            ? h('div', { className: 'dshwmp-pv-body' },
+                h('section', { className: 'dshwmp-pv-canvas', 'aria-label': String(pv.title ?? '') },
+                  h('div', { className: 'dshwmp-pv-phone' }, frame(pv))),
+                side)
+            : h('div', { className: 'dshwmp-pv-body' },
+                h('div', { className: 'dshwmp-pv-empty' },
+                  h('span', {
+                    dangerouslySetInnerHTML: { __html: '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>' },
+                  }),
+                  h('div', { className: 'dshwmp-pv-empty-title' }, t.t('previewEmpty')),
+                  h('div', { className: 'dshwmp-pv-empty-hint' }, t.t('previewLead'))),
+                side))
       }
       return PreviewPage
     }
