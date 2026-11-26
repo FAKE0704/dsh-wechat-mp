@@ -573,7 +573,7 @@ window.__ModuleLoader__.load({
     }
 
     return {
-      inject: ['slots', 'locale'],
+      inject: ['slots', 'locale', 'sidebarRightTabs'],
       apply(ctx) {
         const t = makeT(ctx)
         const Page = makePage(ctx, t)
@@ -582,20 +582,21 @@ window.__ModuleLoader__.load({
         // ① ctx.sidebarRightTabs.register 声明页类型 + 引导页入口；
         // ② sidebar.right.pane.tab 按 definition.id 出正文。
         ctx.effect(() => {
-          try {
-            const tabs = ctx.sidebarRightTabs ?? ctx.get?.('sidebarRightTabs')
-            if (!tabs || typeof tabs.register !== 'function') return
-            tabs.register({
-              id: 'dsh-wechat-mp-preview',
-              kind: 'dsh-wechat-mp-preview',
+          const tabs = ctx.sidebarRightTabs ?? ctx.get?.('sidebarRightTabs')
+          if (!tabs || typeof tabs.register !== 'function') {
+            console.warn('[dsh-wechat-mp] sidebarRightTabs 不可用，右侧栏入口未注册')
+            return
+          }
+          tabs.register({
+            id: 'dsh-wechat-mp-preview',
+            kind: 'dsh-wechat-mp-preview',
+            title: () => t.t('previewSection'),
+            guide: [{
+              id: 'preview',
               title: () => t.t('previewSection'),
-              guide: [{
-                id: 'preview',
-                title: () => t.t('previewSection'),
-                description: () => t.t('previewLead'),
-              }],
-            })
-          } catch { /* 右侧栏控制器不可用的宿主：静默降级 */ }
+              description: () => t.t('previewLead'),
+            }],
+          })
         })
         ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
           name: 'sidebar.right.pane.tab', key: 'dsh-wechat-mp-preview',
