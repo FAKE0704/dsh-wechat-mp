@@ -1,0 +1,38 @@
+{
+  "name": "dsh-wechat-mp",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "index.js",
+  "description": "微信公众号文章 dsh 插件：草稿箱/发布/图片素材八工具（直连微信 API，零宿主依赖，publish 过审批门）。真源 = FAKE0704/Genshu packages/dsh-plugins/dsh-wechat-mp（本仓为镜像）",
+  "license": "MIT",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "wechat",
+    "公众号",
+    "mp",
+    "草稿箱"
+  ],
+  "engines": {
+    "dsh": ">=0.2.2-rc.5 <0.3.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "scripts": {
+    "test": "bun test"
+  },
+  "files": [
+    "index.js",
+    "core.js",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FAKE0704/dsh-wechat-mp.git"
+  }
+}

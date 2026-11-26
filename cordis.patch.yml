@@ -1,0 +1,9 @@
+# dsh-wechat-mp 组合包层：插入插件行（装包即启用，无需手写 profile 依赖）。
+# AppID 可在此填写，或留空改走凭据 WECHAT_MP_APPID；AppSecret 只走凭据库。
+- insert:
+    - id: dsh-wechat-mp
+      name: dsh-wechat-mp
+      config:
+        appId: ''
+        secretRef: WECHAT_MP_SECRET
+        apiBase: https://api.weixin.qq.com
