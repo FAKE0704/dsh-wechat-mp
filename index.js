@@ -4,6 +4,10 @@
 // 本文件只做注册、门控与委托。任何 dsh 宿主装上即用，无宿主侧配套要求；不依赖
 // CreatorStack、不依赖 MCP、不依赖 mcp-manager。
 //
+// 配置面（V0.2.0 新增）：设置页「设置 → 公众号」走 /api/dsh-wechat-mp 桥（settings.js），
+// AppID/apiBase 等写进插件 config（configEditor），AppSecret 只写进 dsh 凭据库
+// （ctx.credentials.set(secretRef, …)），配置里永远不放明文。
+//
 // 审批门：wechat-mp-publish 提交的是对外公开发布（不可撤销）——每次 ask；
 // 草稿类工具只写公众号草稿箱（未发表，可删可改），免审。
 //
@@ -12,6 +16,7 @@
 // 不进工具结果、不落盘（token 仅进程内缓存）。
 
 import { createSemantics, decideWechatMpGate, resolveConfig } from './core.js'
+import { createSettingsService, WEB_PATH } from './settings.js'
 
 export const name = 'dsh-wechat-mp'
 export const inject = ['tools', 'credentials']
@@ -139,4 +144,22 @@ export function apply(ctx, config) {
     '查发布任务状态（发布中/成功/失败/审核不通过/取消），成功时回文章链接。免审。',
     { type: 'object', properties: { publishId: { type: 'string', description: 'wechat-mp-publish 返回的 publish_id' } }, required: ['publishId'], additionalProperties: false },
     sem.publishStatus)
+
+  // ---------- V0.2.0：设置页 Web 桥（POST /api/dsh-wechat-mp，{ method, args }） ----------
+  // 无 webServer 的宿主（如 headless）自动降级——工具面不受影响。
+  const settings = createSettingsService({ ctx, config: cfg, makeSemantics: (merged) => createSemantics({
+    config: merged,
+    ...impls,
+    resolveCredential: impls.resolveCredential ?? (async (ref) => {
+      try {
+        return await ctx.credentials.resolve(ref)
+      } catch {
+        return undefined
+      }
+    }),
+  }) })
+  const webServer = ctx.get('webServer')
+  if (webServer && typeof webServer.register === 'function') {
+    ctx.effect(() => webServer.register({ kind: 'exact', path: WEB_PATH, handler: settings.handleRequest }))
+  }
 }

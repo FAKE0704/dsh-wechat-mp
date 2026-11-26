@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "WeChat Official Account",
+    "description": "Draft and publish WeChat Official Account articles from Harness: eight agent tools (drafts, publish, image assets) talk to api.weixin.qq.com directly. Set the AppID and AppSecret in Settings → WeChat Official Account; the AppSecret is stored only in the credential store. WeChat requires your machine's public IP in the account's IP allowlist."
+  }
+}

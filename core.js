@@ -146,8 +146,8 @@ export function mapWxError(errcode, errmsg) {
   const raw = String(errmsg ?? '').trim()
   const base = `微信接口错误 ${Number.isFinite(code) ? code : errcode}${raw ? `：${raw}` : ''}`
   const table = {
-    40013: { message: 'AppID 无效：与公众号后台「开发→基本配置」不一致', hint: '检查插件 config.appId / 凭据 WECHAT_MP_APPID 是否填成了另一个公众号的值' },
-    40125: { message: 'AppSecret 不匹配：当前 Secret 与该 AppID 不配对', hint: '在 dsh 设置→凭据中重新保存 WECHAT_MP_SECRET（公众号后台可重置 Secret）' },
+    40013: { message: 'AppID 无效：与公众号后台「开发→基本配置」不一致', hint: '在「设置 → 公众号」核对 AppID（或凭据 WECHAT_MP_APPID）是否填成了另一个公众号的值' },
+    40125: { message: 'AppSecret 不匹配：当前 Secret 与该 AppID 不配对', hint: '在「设置 → 公众号」重新保存 AppSecret（公众号后台可重置 Secret）' },
     40164: { message: '调用 IP 不在公众号后台白名单', hint: '把微信返回的出口 IP 加入「开发→基本配置→IP 白名单」（错误串里的 IP 就是真实出口 IP）' },
     61004: { message: '调用 IP 不在公众号后台白名单', hint: '把微信返回的出口 IP 加入「开发→基本配置→IP 白名单」（错误串里的 IP 就是真实出口 IP）' },
     40243: { message: 'AppSecret 已被冻结', hint: '在公众号后台解冻或重置 Secret 后更新凭据' },
@@ -213,7 +213,7 @@ export function createSemantics(opts = {}) {
     const resolved = await resolveCredential(DEFAULT_APPID_REF)
     const value = String((resolved && typeof resolved === 'object' ? resolved.value : resolved) ?? '').trim()
     if (!value) {
-      throw new WechatMpError('missing_appid', '未配置公众号 AppID', '在插件 config.appId 填写，或在 dsh 设置→凭据中保存 WECHAT_MP_APPID')
+      throw new WechatMpError('missing_appid', '未配置公众号 AppID', '打开「设置 → 公众号」填写 AppID，或在凭据中保存 WECHAT_MP_APPID')
     }
     return value
   }
@@ -222,7 +222,7 @@ export function createSemantics(opts = {}) {
     const resolved = await resolveCredential(config.secretRef)
     const value = String((resolved && typeof resolved === 'object' ? resolved.value : resolved) ?? '').trim()
     if (!value) {
-      throw new WechatMpError('missing_secret', `未配置公众号 AppSecret：凭据 ${config.secretRef} 为空`, '在 dsh 设置→凭据中保存该 Secret（插件只从凭据库读取，配置里不存明文）')
+      throw new WechatMpError('missing_secret', `未配置公众号 AppSecret：凭据 ${config.secretRef} 为空`, '打开「设置 → 公众号」粘贴并保存 AppSecret（插件只从凭据库读取，配置里不存明文）')
     }
     return value
   }

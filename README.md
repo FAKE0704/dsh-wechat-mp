@@ -40,14 +40,18 @@ git clone https://github.com/FAKE0704/dsh-wechat-mp.git ~/.dsh/plugins/dsh-wecha
 
 ## 准备两样东西
 
-### 1. 公众号凭据
+### 1. 公众号凭据（推荐：设置页）
+
+装包后打开 **设置 → 公众号**（Settings → WeChat Official Account）：
 
 | 项 | 放哪 | 说明 |
 |---|---|---|
-| AppID | 插件 `config.appId` 或凭据 `WECHAT_MP_APPID` | 不是机密，但放凭据库可以少改配置 |
-| AppSecret | **只放凭据库** `WECHAT_MP_SECRET` | 插件从 dsh 凭据服务解析；配置里没有明文字段 |
+| AppID | 设置页直接填（写进插件 `config.appId`），或留空走凭据 `WECHAT_MP_APPID` | 不是机密，但放凭据库可以少改配置 |
+| AppSecret | **只放凭据库**（设置页的「保存 Secret」写入 `WECHAT_MP_SECRET`） | 插件从 dsh 凭据服务解析；配置里没有明文字段 |
 
-在 dsh 的设置 → 凭据里保存 `WECHAT_MP_SECRET`（值来自公众号后台「开发 → 基本配置 → 开发者密码」）。Secret 只用于换 `access_token`，token 只在进程内缓存，不落盘、不进日志、不进工具结果。
+设置页只显示 Secret 的「已配置/未配置」状态（来自 `describe()`），不回显明文；保存 Secret 后直接点「测试凭据」验证 AppID/Secret/IP 白名单。也可以不走设置页：在 profile 的 `cordis.patch.yml` 里填 `config`，凭据经 dsh 设置 → 凭据手工保存——效果相同。
+
+Secret 只用于换 `access_token`，token 只在进程内缓存，不落盘、不进日志、不进工具结果。
 
 ### 2. IP 白名单
 
