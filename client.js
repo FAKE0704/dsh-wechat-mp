@@ -199,7 +199,7 @@ window.__ModuleLoader__.load({
 .dshwmp-hint { font-size: 12px; color: var(--dsw-alias-label-secondary); overflow-wrap: anywhere; }
 .dshwmp-input { flex: 1 1 220px; min-width: 180px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); font-size: 13px; font-family: inherit; }
 .dshwmp-input:focus { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 1px; }
-.dshwmp-badge { font-size: 12px; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--dsw-alias-border-l1); }
+.dshwmp-badge { font-size: 12px; line-height: 1.5; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--dsw-alias-border-l1); display: inline-block; overflow-wrap: normal; }
 .dshwmp-badge-ok { color: var(--dsw-alias-state-success-primary); background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 12%, transparent); }
 .dshwmp-badge-bad { color: var(--dsw-alias-state-error-primary); background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 12%, transparent); }
 .dshwmp-badge-neutral { color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-2); }
