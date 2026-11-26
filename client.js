@@ -60,10 +60,8 @@ window.__ModuleLoader__.load({
         previewDigest: (d) => `摘要：${d}`,
         previewCoverMissing: '封面未提供',
         previewCoverOk: '封面已提供',
-        previewCoverLabel: '封面（本地路径 / 图片 URL，发送时自动处理）',
-        previewCoverPlaceholder: '/path/to/cover.jpg 或 https://…',
-        previewCoverMediaId: '封面素材 id（可选，优先于上面两项）',
         previewSend: '推送到草稿箱',
+        previewCoverHint: '封面由预览内容自带（agent 提供）；缺封面时先让 agent 重新预览并带上封面。',
         previewSendConfirm: '确认推送？',
         previewSending: '推送中…',
         previewSent: (id) => `已推送草稿箱：media_id=${id}`,
@@ -75,11 +73,6 @@ window.__ModuleLoader__.load({
         previewDraftFetching: '拉取中…',
         previewDraftEmpty: '草稿箱为空（或凭据/白名单未就绪）。',
         previewDraftLoad: (t) => `预览：${t}`,
-        previewFileLabel: '本地文件路径（.md / .html / .txt）',
-        previewFilePlaceholder: '/path/to/article.md',
-        previewFileTitle: '标题（Markdown 无 frontmatter title 时必填）',
-        previewFileLoad: '从文件加载',
-        previewLoading: '加载中…',
         previewSource: (s) => `来源：${s}`,
       },
       en: {
@@ -127,10 +120,8 @@ window.__ModuleLoader__.load({
         previewDigest: (d) => `Digest: ${d}`,
         previewCoverMissing: 'No cover yet',
         previewCoverOk: 'Cover provided',
-        previewCoverLabel: 'Cover (local path / image URL, resolved on send)',
-        previewCoverPlaceholder: '/path/to/cover.jpg or https://…',
-        previewCoverMediaId: 'Cover media_id (optional, takes priority)',
         previewSend: 'Send to drafts',
+        previewCoverHint: 'The cover comes from the preview itself (provided by the agent); if missing, ask the agent to re-preview with a cover.',
         previewSendConfirm: 'Confirm send?',
         previewSending: 'Sending…',
         previewSent: (id) => `Sent to drafts: media_id=${id}`,
@@ -142,11 +133,6 @@ window.__ModuleLoader__.load({
         previewDraftFetching: 'Fetching…',
         previewDraftEmpty: 'Draft box is empty (or credentials / IP allowlist are not ready).',
         previewDraftLoad: (t) => `Preview: ${t}`,
-        previewFileLabel: 'Local file path (.md / .html / .txt)',
-        previewFilePlaceholder: '/path/to/article.md',
-        previewFileTitle: 'Title (required for Markdown without a frontmatter title)',
-        previewFileLoad: 'Load file',
-        previewLoading: 'Loading…',
         previewSource: (s) => `Source: ${s}`,
       },
     }
@@ -447,8 +433,6 @@ window.__ModuleLoader__.load({
         useLocaleTick()
         const [pv, setPv] = useState(null) // 最新预览（含 html）
         const [loadError, setLoadError] = useState('')
-        const [cover, setCover] = useState('')
-        const [coverMediaId, setCoverMediaId] = useState('')
         const [busy, setBusy] = useState(null)
         const [result, setResult] = useState(null) // { ok, text }
         const [confirmSend, setConfirmSend] = useState(false)
@@ -480,11 +464,9 @@ window.__ModuleLoader__.load({
           setConfirmSend(false)
           setBusy('send')
           try {
-            const res = await apiCall('send', { thumbFile: cover.trim() || undefined, thumbUrl: cover.trim() || undefined, thumbMediaId: coverMediaId.trim() || undefined })
+            const res = await apiCall('send', {})
             if (res.ok === true) {
               setResult({ ok: true, text: `${t.t('previewSendOkLead')}${String(res.message ?? t.t('previewSent')(String(res.mediaId ?? '')))}` })
-              setCover('')
-              setCoverMediaId('')
               await refresh()
             } else {
               setResult({ ok: false, text: `${t.t('previewSendFail')}${String(res.message ?? 'failed')}` })
@@ -556,21 +538,12 @@ window.__ModuleLoader__.load({
                     h('span', { className: 'dshwmp-pv-item-time' }, String(d.updateTime ?? '').slice(0, 10)))))
               : null),
 
-          sideCard(t.t('previewCoverLabel'),
-            h('div', { className: 'dshwmp-pv-row' },
-              h('input', {
-                'aria-label': t.t('previewCoverLabel'), className: 'dshwmp-pv-input', value: cover,
-                onChange: (e) => setCover(e.target.value), placeholder: t.t('previewCoverPlaceholder'), autocomplete: 'off',
-              })),
-            h('div', { className: 'dshwmp-pv-row' },
-              h('input', {
-                'aria-label': t.t('previewCoverMediaId'), className: 'dshwmp-pv-input', value: coverMediaId,
-                onChange: (e) => setCoverMediaId(e.target.value), placeholder: 'thumb_media_id', autocomplete: 'off',
-              })),
+          sideCard(t.t('previewSend'),
             h('button', {
               className: `dshwmp-pv-btn dshwmp-pv-btn-primary ${confirmSend ? 'dshwmp-pv-btn-danger' : ''}`, type: 'button',
               disabled: busy !== null || sent, style: { width: '100%', padding: '9px 12px' }, onClick: () => { void onSend() },
             }, busy === 'send' ? t.t('previewSending') : confirmSend ? t.t('previewSendConfirm') : t.t('previewSend')),
+            !hasCover && !sent ? h('div', { className: 'dshwmp-pv-note' }, t.t('previewCoverHint')) : null,
             sent ? h('div', { className: 'dshwmp-pv-note' }, t.t('previewSent')(String(pv.sentMediaId ?? ''))) : null),
 
           result
