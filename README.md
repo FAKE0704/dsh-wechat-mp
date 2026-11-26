@@ -59,17 +59,19 @@ Secret 只用于换 `access_token`，token 只在进程内缓存，不落盘、�
 
 公众号后台「开发 → 基本配置 → IP 白名单」必须包含**运行 dsh 这台机器的出口 IP**。家庭宽带 IP 会变——变了就报 `40164`/`61004`，错误串里会带微信看到的真实出口 IP，照着加白名单即可。先跑 `wechat-mp-status` 可以在动文章之前把这个问题暴露出来。
 
-## 十一个工具
+## 十二个工具
 
 | 工具 | 作用 | 审批 |
 |---|---|---|
 | `wechat-mp-status` | 校验凭据、换 token，报 AppID/token 剩余时间 | 免审 |
 | `wechat-mp-render` | **Markdown → 公众号 HTML**（样式逐元素内联，渲染即预检，输出文件路径可直接当 `contentFile`） | 免审 |
 | `wechat-mp-precheck` | **正文预检**：字符数 ≤20000、体积 <1MB、图片格式白名单，超限给具体数字与建议 | 免审 |
+| `wechat-mp-preview` | 推预览页（GUI 侧边栏「公众号 → 预览」）给用户审查，用户点「推送到草稿箱」成稿 | 免审 |
 | `wechat-mp-upload-image` | 图片（本地 / URL / data URL）→ 永久素材，回 `media_id` + `url`；webp 自动转 jpg（需 sharp） | 免审 |
 | `wechat-mp-draft-create` | 新建草稿（自动封面 + 正文图片转素材 + 入口预检 fail-fast） | 免审 |
-| `wechat-mp-draft-update` | 替换草稿（先建新、成功后再删旧；旧稿删不掉只告警） | 免审 |
-| `wechat-mp-draft-list` | 草稿箱列表（media_id/标题/作者/更新时间，分页 ≤20） | 免审 |
+| `wechat-mp-draft-update` | 替换草稿（先建新、成功后再删旧；旧稿删不掉只告警）；**缺封面自动沿用旧草稿封面**（V0.5.0） | 免审 |
+| `wechat-mp-draft-list` | 草稿箱列表（media_id/标题/作者/更新时间，分页 ≤20）；message 逐篇带「标题（mediaId）」 | 免审 |
+| `wechat-mp-draft-get` | 草稿详情（标题/作者/摘要/正文 HTML/封面素材/原文链接）；message 带 mediaId 与封面 | 免审 |
 | `wechat-mp-draft-delete` | 删草稿 | 免审 |
 | `wechat-mp-publish` | 提交发布（`freepublish`，异步），回 `publish_id` | **ask** |
 | `wechat-mp-publish-status` | 发布状态（发布中/成功/失败/审核不通过）+ 文章链接 | 免审 |
@@ -153,8 +155,19 @@ config:
 
 微信素材接口只认 jpg/png/gif/bmp 文件名后缀。插件在上传前侦测 webp（magic bytes / 扩展名 / content-type 三重）：
 
-- **装了 sharp**（`bun add sharp` 或 `npm i sharp`，可选 peerDependency）→ 自动转 jpg 后上传，正文图片与封面同样生效；
-- **没装** → 工具返回 `webp_convert_unavailable`，提示一次性安装 sharp 或手工转换，不会静默猜测。
+- **装了 sharp** → 自动转 jpg（quality 90）后上传，正文图片与封面同样生效。V0.5.0 起 sharp 以 `optionalDependencies` 随包声明，`dsh plugin add` 安装包时一并装好（macOS/Linux/Windows 均有 N-API 预编译产物，无需编译）；
+- **没装**（如手工拷贝目录安装）→ 工具返回 `webp_convert_unavailable`，提示一次性安装 sharp 或手工转换，不会静默猜测。
+
+## 内置 skill：交付格式规范（V0.5.0）
+
+插件向 skill 注册表注册 `wechat-mp-article`（kebab-case，model/user 均可调用）：把「最终交付物 = 草稿箱草稿，不是本地 .md」、render → preview → 草稿标准链路、封面规则、message 取 mediaId 的读法固化为模型可见指令。宿主没有 skill 子系统时自动跳过，不影响工具面。
+
+## V0.5.0 变更摘要
+
+- **修复** `wechat-mp-precheck` 对任何输入都报 `returned invalid output: value is not lossless JSON`：预检通过时结果对象带显式 `hint: undefined` 键，被 dsh 工具结果的 lossless-JSON 边界整单拒收；现在 hint 只在确有建议时出现。
+- **工具结果可见性**：模型侧只见 `message`（+`hint`），结构化字段不透传——`draft-list` message 逐篇带「N. 标题（mediaId=…）」，`draft-get` message 带 mediaId/封面/作者，后续调用直接从 message 取 id。
+- **draft-update 封面沿用**：不给 `thumb*` 参数时回读旧草稿封面 `thumb_media_id` 沿用，不再逼着重传素材；显式换新封面且旧稿删除成功、旧素材再无其他草稿引用时，顺带清理孤儿永久素材（防误删共享素材：任一前提不满足就跳过）。
+- **sharp 随包可选声明** + **内置 skill**（见上文两节）。
 
 ## 错误码速查
 

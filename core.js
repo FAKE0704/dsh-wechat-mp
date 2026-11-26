@@ -575,6 +575,33 @@ export function createSemantics(opts = {}) {
     throw new WechatMpError('missing_thumb', '缺少封面：公众号草稿接口要求 thumb_media_id（永久素材）', '提供 thumbMediaId（已有素材）/ thumbFile（本地图片）/ thumbUrl（网络图片，后两者自动上传为永久素材）')
   }
 
+  /** 读一篇草稿的封面 thumb_media_id；草稿已删/接口失败等读不到的情况返回 ''。 */
+  async function fetchDraftThumb(mediaId, account) {
+    try {
+      const { body } = await apiCall('/cgi-bin/draft/get', { json: { media_id: mediaId } }, account)
+      const news = Array.isArray(body?.news_item) ? body.news_item[0] : undefined
+      return String(news?.thumb_media_id ?? '')
+    } catch {
+      return ''
+    }
+  }
+
+  /** 分页扫草稿箱：是否仍有草稿（排除 exclude 集合里的 media_id）引用该封面素材。 */
+  async function draftThumbInUse(thumbMediaId, account, exclude) {
+    for (let page = 0, offset = 0; page < 250; page += 1, offset += DRAFT_BATCHGET_MAX) {
+      const { body } = await apiCall('/cgi-bin/draft/batchget', { json: { offset, count: DRAFT_BATCHGET_MAX } }, account)
+      const items = Array.isArray(body?.item) ? body.item : []
+      for (const item of items) {
+        if (exclude.has(String(item?.media_id ?? ''))) continue
+        const newsItems = Array.isArray(item?.content?.news_item) ? item.content.news_item : []
+        if (newsItems.some((n) => String(n?.thumb_media_id ?? '') === thumbMediaId)) return true
+      }
+      const total = Number(body?.total_count ?? 0) || 0
+      if (items.length === 0 || offset + items.length >= total) return false
+    }
+    return false
+  }
+
   // ---- 参数小工具 ----
 
   function strArg(value) {
@@ -684,23 +711,51 @@ export function createSemantics(opts = {}) {
   const draftUpdate = guard(async (args) => {
     const oldMediaId = strArg(args.mediaId)
     if (!oldMediaId) throw new WechatMpError('missing_media_id', '缺少 mediaId', '先用 wechat-mp-draft-list 查目标草稿的 media_id')
-    const prepared = await prepareDraft(args)
+    const title = strArg(args.title)
+    if (!title) throw new WechatMpError('missing_title', '缺少标题 title', '公众号标题必填（建议 ≤24 字）')
+    const account = pickAccount(args)
+    // 封面策略：缺 thumb 参数时回读旧草稿封面沿用（不再逼调用方重传素材，也杜绝旧素材孤儿化）；
+    // 显式给了新封面时也读一次旧封面——替换成功后顺带清理不再被引用的旧永久素材。
+    const hasThumbArg = Boolean(strArg(args.thumbMediaId) || strArg(args.thumbFile) || strArg(args.thumbUrl))
+    const oldThumbMediaId = await fetchDraftThumb(oldMediaId, account)
+    let preparedArgs = args
+    if (!hasThumbArg && oldThumbMediaId) preparedArgs = { ...args, thumbMediaId: oldThumbMediaId }
+    const prepared = await prepareDraft(preparedArgs)
     // 先建新、再删旧：add 失败时旧草稿仍在（delete+add 顺序会在失败窗口里丢稿）
-    const { body } = await apiCall('/cgi-bin/draft/add', { json: { articles: [prepared.article] } }, pickAccount(args))
+    const { body } = await apiCall('/cgi-bin/draft/add', { json: { articles: [prepared.article] } }, account)
     const newMediaId = String(body?.media_id ?? '')
     if (!newMediaId) throw new WechatMpError('draft_missing_media_id', '草稿创建响应缺少 media_id', '微信接口异常，稍后重试')
     let removed = true
     let warning
     try {
-      await apiCall('/cgi-bin/draft/delete', { json: { media_id: oldMediaId } }, pickAccount(args))
+      await apiCall('/cgi-bin/draft/delete', { json: { media_id: oldMediaId } }, account)
     } catch (error) {
       removed = false
       warning = error instanceof WechatMpError ? `旧草稿删除失败（${error.code}）：草稿箱里可能同时存在新旧两份，可手工删除` : '旧草稿删除失败'
     }
-    return success(`草稿已替换：${prepared.title}（新 media_id=${newMediaId}${removed ? `，旧 ${oldMediaId} 已删除` : '，旧草稿未删' }）`, {
+    // 孤儿封面清理（尽力而为）：旧封面没被沿用、旧稿已删成功、且箱里再无其他草稿引用它 → 删除该永久素材。
+    // 任一前提不满足（尤其旧稿删除失败时旧稿仍引用它）就跳过，宁可留着也不误删共享素材。
+    let releasedThumbMediaId = ''
+    if (oldThumbMediaId && removed && oldThumbMediaId !== prepared.thumbMediaId) {
+      try {
+        const inUse = await draftThumbInUse(oldThumbMediaId, account, new Set([oldMediaId, newMediaId]))
+        if (!inUse) {
+          await apiCall('/cgi-bin/material/del_material', { json: { media_id: oldThumbMediaId } }, account)
+          releasedThumbMediaId = oldThumbMediaId
+        }
+      } catch { /* 清理失败不影响替换结果，素材留存无害 */ }
+    }
+    const reusedThumb = oldThumbMediaId !== '' && prepared.thumbMediaId === oldThumbMediaId
+    const thumbNote = reusedThumb
+      ? '，封面沿用旧草稿素材'
+      : (releasedThumbMediaId ? `，旧封面素材已清理（media_id=${releasedThumbMediaId}）` : '')
+    return success(`草稿已替换：${prepared.title}（新 media_id=${newMediaId}${removed ? `，旧 ${oldMediaId} 已删除` : '，旧草稿未删'}${thumbNote}）`, {
       mediaId: newMediaId,
       replacedMediaId: oldMediaId,
       removed,
+      thumbMediaId: prepared.thumbMediaId,
+      ...(reusedThumb ? { reusedThumbMediaId: oldThumbMediaId } : {}),
+      ...(releasedThumbMediaId ? { releasedThumbMediaId } : {}),
       ...(warning ? { warning } : {}),
     })
   })
@@ -722,7 +777,11 @@ export function createSemantics(opts = {}) {
       }
     })
     const total = Number(body?.total_count ?? list.length) || list.length
-    return success(`草稿箱共 ${total} 篇（本页 ${list.length} 篇）`, { total, items: list })
+    // 工具结果的结构化字段模型侧不可见（只见 output.render 的 message），把
+    // 「标题（mediaId）」逐篇编进 message：后续 draft-get/update 直接从 message 取 id，
+    // 不必解析 JSON 或翻会话日志。
+    const summary = list.map((item, index) => `${offset + index + 1}. ${item.title || '（无标题）'}（mediaId=${item.mediaId}）`).join('；')
+    return success(`草稿箱共 ${total} 篇（本页 ${list.length} 篇）：${summary || '（草稿箱为空）'}`, { total, items: list })
   })
 
   const draftGet = guard(async (args) => {
@@ -731,16 +790,23 @@ export function createSemantics(opts = {}) {
     const { body } = await apiCall('/cgi-bin/draft/get', { json: { media_id: mediaId } }, pickAccount(args))
     const news = Array.isArray(body?.news_item) ? body.news_item[0] : undefined
     if (!news) throw new WechatMpError('draft_empty', '草稿详情为空或结构不符', '确认 media_id 存在（wechat-mp-draft-list 核对）')
-    return success(`草稿详情：${String(news.title ?? '')}`, {
-      mediaId,
-      title: String(news.title ?? ''),
-      author: String(news.author ?? ''),
-      digest: String(news.digest ?? ''),
-      content: String(news.content ?? ''),
-      thumbMediaId: String(news.thumb_media_id ?? ''),
-      sourceUrl: String(news.content_source_url ?? ''),
-      url: String(news.url ?? ''),
-    })
+    const title = String(news.title ?? '')
+    const author = String(news.author ?? '')
+    const thumbMediaId = String(news.thumb_media_id ?? '')
+    // message 带上 mediaId/封面/作者等关键字段（content 太长留在结构化字段，UI 可见）
+    return success(
+      `草稿详情：${title || '（无标题）'}（mediaId=${mediaId}${thumbMediaId ? `，封面 thumbMediaId=${thumbMediaId}` : '，无封面'}${author ? `，作者 ${author}` : ''}）`,
+      {
+        mediaId,
+        title,
+        author,
+        digest: String(news.digest ?? ''),
+        content: String(news.content ?? ''),
+        thumbMediaId,
+        sourceUrl: String(news.content_source_url ?? ''),
+        url: String(news.url ?? ''),
+      },
+    )
   })
 
   const draftDelete = guard(async (args) => {
@@ -795,7 +861,20 @@ export function createSemantics(opts = {}) {
     const message = errorCount + warnCount === 0
       ? `预检通过：正文 ${report.chars} 字符（上限 ${PRECHECK_MAX_CHARS}），体积 ${(report.bytes / 1024).toFixed(1)}KB（上限 1MB），${report.images.length} 张图片全部在格式白名单内`
       : `预检发现问题：${errorCount} 个错误、${warnCount} 个警告（正文 ${report.chars} 字符 / ${(report.bytes / 1024).toFixed(1)}KB）`
-    return { ok: errorCount === 0, code: errorCount > 0 ? 'precheck_failed' : 'precheck_passed', message, ...report, issues: report.issues, hint: report.issues.find((x) => x.hint)?.hint }
+    // dsh 工具结果边界要求 lossless JSON：显式 undefined 键（hint: undefined）会被整单拒收
+    // （pipeline.ts snapshotJsonValue 返回 undefined → "value is not lossless JSON"），
+    // 所以 hint 只在确有建议时以条件展开出现，绝不留 undefined 键位。
+    const firstHint = report.issues.find((x) => x.hint)?.hint
+    return {
+      ok: errorCount === 0,
+      code: errorCount > 0 ? 'precheck_failed' : 'precheck_passed',
+      message,
+      chars: report.chars,
+      bytes: report.bytes,
+      issues: report.issues,
+      images: report.images,
+      ...(firstHint ? { hint: firstHint } : {}),
+    }
   })
 
   const render = guard(async (args) => {

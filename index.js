@@ -17,6 +17,7 @@
 
 import { createSemantics, decideWechatMpGate, resolveConfig } from './core.js'
 import { createSettingsService, WEB_PATH } from './settings.js'
+import { WECHAT_MP_SKILL_NAME, WECHAT_MP_SKILL_DESCRIPTION, WECHAT_MP_SKILL_WHEN_TO_USE, WECHAT_MP_SKILL_CONTENT } from './skill.js'
 
 export const name = 'dsh-wechat-mp'
 export const inject = ['tools', 'credentials']
@@ -190,6 +191,20 @@ export function apply(ctx, config) {
       }
       return res
     })
+
+  // ---------- 内置 skill：交付格式规范（V0.5.0） ----------
+  // 经 ctx.get 惰性取 skill 服务：宿主没有 skill 子系统时自动跳过，不拖垮工具面。
+  // runtime register 只需 name/description/invocation 合法；content 在加载时原样发给模型。
+  const skills = ctx.get('skills')
+  if (skills && typeof skills.register === 'function') {
+    ctx.effect(() => skills.register({
+      name: WECHAT_MP_SKILL_NAME,
+      description: WECHAT_MP_SKILL_DESCRIPTION,
+      whenToUse: WECHAT_MP_SKILL_WHEN_TO_USE,
+      source: 'bundled',
+      content: WECHAT_MP_SKILL_CONTENT,
+    }))
+  }
 
   // ---------- V0.2.0：设置页 Web 桥（POST /api/dsh-wechat-mp，{ method, args }） ----------
   // 无 webServer 的宿主（如 headless）自动降级——工具面不受影响。

@@ -197,12 +197,32 @@ describe('多账号语义核（token 缓存按账号隔离）', () => {
     expect(r.uploadedImages[0]).toContain('qpic.cn')
   })
 
-  test('webp 图片 + 未装 sharp → 明确报错提示安装', async () => {
+  test('webp 图片 + 随包 sharp（optionalDependencies）→ 默认转换器自动转 jpg', async () => {
+    // sharp 自 V0.5.0 起随包声明安装；没装的环境自动跳过本用例（见降级契约用例）
+    const hasSharp = await import('sharp').then(() => true, () => false)
+    const run = hasSharp ? test : test.skip
+    const sharp = hasSharp ? (await import('sharp')).default : null
+    const webp = await sharp({ create: { width: 2, height: 2, channels: 3, background: '#fff' } }).webp().toBuffer()
+    const dataUrl = `data:image/webp;base64,${Buffer.from(webp).toString('base64')}`
+    const { sem } = makeRoutedSem([['add_material', { media_id: 'm1', url: 'https://mmbiz.qpic.cn/x.jpg' }]])
+    const r = await sem.uploadImage({ dataUrl })
+    expect(r.ok).toBe(true)
+    expect(r.filename.endsWith('.jpg')).toBe(true)
+  })
+
+  test('webp 转换器不可用（手工拷贝安装没带 sharp）→ 明确报错提示安装', async () => {
+    // 缺省转换器在 sharp 缺失时抛 webp_convert_unavailable；这里注入同形抛错验证降级契约：
+    // 转换器的 WechatMpError 要原样冒泡成 {ok:false, code, hint}，不静默猜测。
     const sem = createSemantics({
       config: resolveConfig({ accounts: [{ name: 'a', appId: 'wxAAA', secretRef: 'SECRET_A' }], apiBase: 'https://fake.invalid' }),
       fetchImpl: async () => new Response(JSON.stringify({ access_token: 'tok', expires_in: 7200 }), { status: 200 }),
       readFileImpl: async () => new Uint8Array([1]),
       resolveCredential: okCred(new Map([['SECRET_A', 'sec-a']])),
+      convertWebpImpl: async () => {
+        throw new WechatMpError('webp_convert_unavailable',
+          'webp 图片需要转换成 jpg，但可选依赖 sharp 未安装',
+          '安装一次即可：bun add sharp（或 npm i sharp）；或先把 webp 手工转成 jpg/png 再传')
+      },
       now: () => 1_000_000,
     })
     const r = await sem.uploadImage({ dataUrl: 'data:image/webp;base64,AAAA' })
@@ -296,5 +316,177 @@ describe('预览推送工具（不发网络、不落盘）', () => {
     const r = await sem.preview({ content: `<p>${'字'.repeat(PRECHECK_MAX_CHARS + 10)}</p>`, title: 't' })
     expect(r.ok).toBe(false)
     expect(r.code).toBe('precheck_failed')
+  })
+})
+
+// ---- V0.5.0：lossless 输出边界 / message 摘要 / draft-update 封面沿用与孤儿清理 ----
+
+/** 按路径片段路由的 fetch 注入：记录每次调用（路径+body），命中片段返回 JSON。 */
+function makeRoutedSem(routes) {
+  const calls = []
+  const sem = createSemantics({
+    config: resolveConfig({ accounts: [{ name: 'a', appId: 'wxAAA', secretRef: 'SECRET_A' }], apiBase: 'https://fake.invalid' }),
+    fetchImpl: async (url, init) => {
+      const u = String(url)
+      const bodyText = typeof init?.body === 'string' ? init.body : ''
+      calls.push(`${u.replace('https://fake.invalid', '').split('?')[0]} ${bodyText}`)
+      if (u.includes('stable_token')) {
+        return new Response(JSON.stringify({ access_token: 'tok', expires_in: 7200 }), { status: 200 })
+      }
+      for (const [needle, body] of routes) {
+        if (u.includes(needle)) {
+          const payload = typeof body === 'function' ? body(bodyText) : body
+          return new Response(JSON.stringify(payload), { status: 200 })
+        }
+      }
+      return new Response(JSON.stringify({ errcode: 0 }), { status: 200 })
+    },
+    readFileImpl: async () => new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+    resolveCredential: okCred(new Map([['SECRET_A', 'sec-a']])),
+    now: () => 1_000_000,
+  })
+  return { sem, calls }
+}
+
+const countCalls = (calls, needle) => calls.filter((c) => c.includes(needle)).length
+
+describe('工具输出 lossless 边界 + message 摘要（V0.5.0）', () => {
+  test('precheck 通过 → 无显式 hint 键（lossless JSON 可序列化）', async () => {
+    const sem = createSemantics({ config: resolveConfig({}) })
+    const r = await sem.precheck({ content: '<p>你好</p>' })
+    expect(r.ok).toBe(true)
+    expect(Object.prototype.hasOwnProperty.call(r, 'hint')).toBe(false)
+    // dsh 工具结果边界等价检查：JSON 往返无损
+    expect(JSON.parse(JSON.stringify(r))).toEqual(r)
+  })
+
+  test('precheck 有问题 → hint 取第一条建议，且整单可无损序列化', async () => {
+    const sem = createSemantics({ config: resolveConfig({}) })
+    const r = await sem.precheck({ content: `<p>${'字'.repeat(PRECHECK_MAX_CHARS + 1)}</p>` })
+    expect(r.ok).toBe(false)
+    expect(r.code).toBe('precheck_failed')
+    expect(r.hint).toContain('删减')
+    expect(JSON.parse(JSON.stringify(r))).toEqual(r)
+  })
+
+  test('precheck contentFile 传法同样不再报 invalid output（回归：hint 键）', async () => {
+    const sem = createSemantics({ config: resolveConfig({}), readFileImpl: async () => '<p>来自文件</p>' })
+    const r = await sem.precheck({ contentFile: '/tmp/a.html' })
+    expect(r.ok).toBe(true)
+    expect(JSON.parse(JSON.stringify(r))).toEqual(r)
+  })
+
+  test('draft-list message 逐篇带「N. 标题（mediaId=…）」', async () => {
+    const { sem } = makeRoutedSem([
+      ['draft/batchget', {
+        total_count: 2,
+        item: [
+          { media_id: 'mid_1', content: { news_item: [{ title: '第一篇', author: '甲', digest: 'd1', thumb_media_id: 't1' }] } },
+          { media_id: 'mid_2', content: { news_item: [{ title: '', author: '', digest: '', thumb_media_id: '' }] } },
+        ],
+      }],
+    ])
+    const r = await sem.draftList({})
+    expect(r.ok).toBe(true)
+    expect(r.total).toBe(2)
+    expect(r.message).toContain('草稿箱共 2 篇')
+    expect(r.message).toContain('1. 第一篇（mediaId=mid_1）')
+    expect(r.message).toContain('2. （无标题）（mediaId=mid_2）')
+  })
+
+  test('draft-get message 带 mediaId 与封面 thumbMediaId', async () => {
+    const { sem } = makeRoutedSem([
+      ['draft/get', { news_item: [{ title: '标题甲', author: '乙', thumb_media_id: 'thumb_9' }] }],
+    ])
+    const r = await sem.draftGet({ mediaId: 'mid_9' })
+    expect(r.ok).toBe(true)
+    expect(r.mediaId).toBe('mid_9')
+    expect(r.message).toContain('mediaId=mid_9')
+    expect(r.message).toContain('封面 thumbMediaId=thumb_9')
+    expect(r.message).toContain('作者 乙')
+  })
+})
+
+describe('draft-update 封面沿用与孤儿素材清理（V0.5.0）', () => {
+  const BASE_ROUTES = (extra = []) => [
+    ['draft/get', { news_item: [{ title: '旧标题', thumb_media_id: 'old_thumb' }] }],
+    ['draft/add', { media_id: 'new_mid' }],
+    ['draft/delete', { errcode: 0 }],
+    ['del_material', { errcode: 0 }],
+    ...extra,
+  ]
+
+  test('缺 thumb 参数 → 回读旧草稿封面沿用，不新传素材', async () => {
+    const { sem, calls } = makeRoutedSem(BASE_ROUTES())
+    const r = await sem.draftUpdate({ mediaId: 'old_mid', title: '新标题', content: '<p>x</p>' })
+    expect(r.ok).toBe(true)
+    expect(r.mediaId).toBe('new_mid')
+    expect(r.thumbMediaId).toBe('old_thumb')
+    expect(r.reusedThumbMediaId).toBe('old_thumb')
+    expect(r.message).toContain('封面沿用旧草稿素材')
+    // draft/get 读旧封面；draft/add 的 articles 里 thumb_media_id = 旧值
+    expect(countCalls(calls, 'draft/get')).toBe(1)
+    const addCall = calls.find((c) => c.includes('draft/add'))
+    expect(addCall).toContain('old_thumb')
+    expect(countCalls(calls, 'add_material')).toBe(0) // 没有重传封面素材
+    expect(countCalls(calls, 'del_material')).toBe(0) // 沿用中的素材不清理
+  })
+
+  test('给了新封面 thumbFile → 上传新素材；旧素材无其他引用时被清理', async () => {
+    const { sem, calls } = makeRoutedSem(BASE_ROUTES([
+      ['add_material', { media_id: 'new_thumb', url: 'https://mmbiz.qpic.cn/new.jpg' }],
+      ['draft/batchget', { total_count: 0, item: [] }], // 箱里已无其他草稿引用旧封面
+    ]))
+    const r = await sem.draftUpdate({ mediaId: 'old_mid', title: '新标题', content: '<p>x</p>', thumbFile: '/tmp/cover.png' })
+    expect(r.ok).toBe(true)
+    expect(r.thumbMediaId).toBe('new_thumb')
+    expect(r.releasedThumbMediaId).toBe('old_thumb')
+    expect(r.message).toContain('旧封面素材已清理')
+    expect(countCalls(calls, 'add_material')).toBe(1)
+    const delCall = calls.find((c) => c.includes('del_material'))
+    expect(delCall).toContain('old_thumb')
+  })
+
+  test('旧封面仍被其他草稿引用 → 不清理（防误删共享素材）', async () => {
+    const { sem, calls } = makeRoutedSem(BASE_ROUTES([
+      ['add_material', { media_id: 'new_thumb', url: 'https://mmbiz.qpic.cn/new.jpg' }],
+      ['draft/batchget', {
+        total_count: 1,
+        item: [{ media_id: 'other_mid', content: { news_item: [{ title: '别的稿', thumb_media_id: 'old_thumb' }] } }],
+      }],
+    ]))
+    const r = await sem.draftUpdate({ mediaId: 'old_mid', title: '新标题', content: '<p>x</p>', thumbFile: '/tmp/cover.png' })
+    expect(r.ok).toBe(true)
+    expect(r.thumbMediaId).toBe('new_thumb')
+    expect(r.releasedThumbMediaId).toBeUndefined()
+    expect(countCalls(calls, 'del_material')).toBe(0)
+  })
+
+  test('旧草稿删除失败 → 旧稿仍引用封面，跳过清理', async () => {
+    const routes = [
+      ['draft/get', { news_item: [{ title: '旧标题', thumb_media_id: 'old_thumb' }] }],
+      ['add_material', { media_id: 'new_thumb', url: 'https://mmbiz.qpic.cn/new.jpg' }],
+      ['draft/add', { media_id: 'new_mid' }],
+      ['draft/delete', { errcode: 40007, errmsg: 'invalid media_id' }],
+      ['del_material', { errcode: 0 }],
+    ]
+    const { sem, calls } = makeRoutedSem(routes)
+    const r = await sem.draftUpdate({ mediaId: 'old_mid', title: '新标题', content: '<p>x</p>', thumbFile: '/tmp/cover.png' })
+    expect(r.ok).toBe(true)
+    expect(r.removed).toBe(false)
+    expect(r.warning).toContain('旧草稿删除失败')
+    expect(countCalls(calls, 'del_material')).toBe(0)
+    expect(countCalls(calls, 'draft/batchget')).toBe(0)
+  })
+
+  test('旧草稿已不存在（封面读不到）+ 缺 thumb → 原样报 missing_thumb', async () => {
+    const { sem, calls } = makeRoutedSem([
+      ['draft/get', { errcode: 40007, errmsg: 'invalid media_id' }],
+      ['draft/add', { media_id: 'new_mid' }],
+    ])
+    const r = await sem.draftUpdate({ mediaId: 'ghost_mid', title: '新标题', content: '<p>x</p>' })
+    expect(r.ok).toBe(false)
+    expect(r.code).toBe('missing_thumb')
+    expect(countCalls(calls, 'draft/add')).toBe(0)
   })
 })
