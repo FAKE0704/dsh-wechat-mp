@@ -379,10 +379,10 @@ window.__ModuleLoader__.load({
   var(--dsw-alias-bg-layer-2);
   border: 1px solid var(--dsw-alias-border-l1); border-radius: 14px; padding: 36px 16px 44px; }
 /* iPhone 15 Pro：比例≈19.5:9，细钛边框 + 灵动岛 + 侧键 */
-.dshwmp-pv-phone { position: relative; width: 380px; max-width: 100%; padding: 8px; border-radius: 52px;
+.dshwmp-pv-phone { position: relative; width: 380px; max-width: 100%; padding: 8px; border-radius: 52px; box-sizing: border-box;
   background: linear-gradient(160deg, #4c4c52, #2c2c2e 42%, #1b1b1d);
   box-shadow: 0 22px 48px rgba(0, 0, 0, 0.30), inset 0 1px 0 rgba(255, 255, 255, 0.10), inset 0 0 0 2px rgba(255, 255, 255, 0.05); }
-.dshwmp-pv-screen { position: relative; width: 364px; max-width: 100%; height: 782px; border-radius: 44px; overflow: hidden; background: #ffffff; }
+.dshwmp-pv-screen { position: relative; width: 100%; height: 782px; border-radius: 44px; overflow: hidden; background: #ffffff; }
 .dshwmp-pv-screen iframe { width: 100%; height: 100%; border: 0; display: block; }
 .dshwmp-pv-island { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); width: 96px; height: 26px; border-radius: 999px; background: #000000; z-index: 2; }
 .dshwmp-pv-key { position: absolute; width: 3px; border-radius: 2px; background: linear-gradient(180deg, #3a3a3e, #232326); }
