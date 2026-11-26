@@ -578,14 +578,28 @@ window.__ModuleLoader__.load({
         const t = makeT(ctx)
         const Page = makePage(ctx, t)
         const PreviewPage = makePreviewPage(ctx, t)
-        // 预览挂右侧栏：sidebar.right.pane.tab（body）+ .pane.tab.title（chip 标题），
-        // 同一 key 寻址；右侧栏控制器按在效 tab 类型分发。
+        // 预览挂右侧栏，两阶段注册（对齐 dsh-client-ui-sidebar-right 契约）：
+        // ① ctx.sidebarRightTabs.register 声明页类型 + 引导页入口；
+        // ② sidebar.right.pane.tab 按 definition.id 出正文。
+        ctx.effect(() => {
+          try {
+            const tabs = ctx.sidebarRightTabs ?? ctx.get?.('sidebarRightTabs')
+            if (!tabs || typeof tabs.register !== 'function') return
+            tabs.register({
+              id: 'dsh-wechat-mp-preview',
+              kind: 'dsh-wechat-mp-preview',
+              title: () => t.t('previewSection'),
+              guide: [{
+                id: 'preview',
+                title: () => t.t('previewSection'),
+                description: () => t.t('previewLead'),
+              }],
+            })
+          } catch { /* 右侧栏控制器不可用的宿主：静默降级 */ }
+        })
         ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
           name: 'sidebar.right.pane.tab', key: 'dsh-wechat-mp-preview',
         }, PreviewPage))
-        ctx.slots.inject('sidebar.right.pane.tab.title', () => ctx.slots.register({
-          name: 'sidebar.right.pane.tab.title', key: 'dsh-wechat-mp-preview',
-        }, function PreviewTabTitle() { return h('span', null, t.t('previewSection')) }))
         // 凭据配置仍在设置页
         ctx.slots.inject('settings.section', () => ctx.slots.register({
           name: 'settings.section', id: 'dsh-wechat-mp', order: 65, label: () => t.t('section'),
