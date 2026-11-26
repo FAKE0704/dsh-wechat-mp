@@ -13,8 +13,9 @@
 // - 素材上传按文件名后缀判类型，URL 末段无扩展名会 40113；
 // - 个人主体 freepublish 恒 48001，真发只能后台人工点。
 
-import { readFile as fsReadFile } from 'node:fs/promises'
+import { readFile as fsReadFile, writeFile as fsWriteFile, mkdir as fsMkdir } from 'node:fs/promises'
 import { basename, dirname, extname, isAbsolute, resolve as resolvePath } from 'node:path'
+import { renderMarkdown, extractFrontmatter } from './render.js'
 
 export const DEFAULT_API_BASE = 'https://api.weixin.qq.com'
 export const DEFAULT_SECRET_REF = 'WECHAT_MP_SECRET'
@@ -23,6 +24,18 @@ export const DEFAULT_TIMEOUT_MS = 20_000
 export const DEFAULT_MAX_IMAGE_BYTES = 10 * 1024 * 1024
 export const TOKEN_EXPIRY_MARGIN_MS = 5 * 60 * 1000
 export const GATED_TOOL = 'wechat-mp-publish'
+
+// ---- 正文预检（V0.3.0）----
+export const PRECHECK_MAX_CHARS = 20_000
+export const PRECHECK_MAX_BYTES = 1024 * 1024
+export const PRECHECK_IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'bmp']
+export const DATA_URL_MIME_TO_EXT = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/gif': 'gif',
+  'image/bmp': 'bmp',
+  'image/webp': 'webp',
+}
 
 const REF_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/
 const TOKEN_INVALID_CODES = new Set([40001, 42001, 40014])
@@ -49,21 +62,117 @@ export function isCredentialRefName(value) {
 }
 
 /**
- * 解析并校验插件配置（非法即抛——装载期 fail-closed，不静默放行）。
+ * 归一并校验插件配置（非法即抛——装载期 fail-closed，不静默放行）。
+ * 支持多账号（V0.3.0）：cfg.accounts = [{ name, appId?, secretRef? }, …]；
+ * 向后兼容旧单账号 config（appId/secretRef 视为一个名为 default 的账号）。
  * @param {unknown} raw cordis 插件行 config
  */
 export function resolveConfig(raw) {
   const cfg = (typeof raw === 'object' && raw !== null) ? raw : {}
   const apiBase = normalizeApiBase(cfg.apiBase ?? DEFAULT_API_BASE)
-  const appId = typeof cfg.appId === 'string' ? cfg.appId.trim() : ''
-  const secretRef = cfg.secretRef ?? DEFAULT_SECRET_REF
-  if (!isCredentialRefName(secretRef)) {
-    throw new Error(`dsh-wechat-mp: secretRef 必须是环境变量名形态（${REF_PATTERN}），收到 ${JSON.stringify(secretRef)}`)
-  }
   const timeoutMs = intInRange(cfg.timeoutMs, DEFAULT_TIMEOUT_MS, 1_000, 120_000, 'timeoutMs')
   const maxImageBytes = intInRange(cfg.maxImageBytes, DEFAULT_MAX_IMAGE_BYTES, 64 * 1024, 20 * 1024 * 1024, 'maxImageBytes')
+  const accounts = resolveAccounts(cfg)
   const impls = (typeof cfg.impls === 'object' && cfg.impls !== null) ? cfg.impls : undefined
-  return { apiBase, appId, secretRef, timeoutMs, maxImageBytes, ...(impls ? { impls } : {}) }
+  return {
+    apiBase, timeoutMs, maxImageBytes,
+    // 兼容面：旧字段继续暴露（= 第一个账号），settings.js / 旧调用方不受影响
+    appId: accounts[0].appId,
+    secretRef: accounts[0].secretRef,
+    accounts,
+    ...(impls ? { impls } : {}),
+  }
+}
+
+/** 归一账号列表：显式 accounts 优先；否则旧单账号字段折成一个 default 账号。 */
+export function resolveAccounts(cfg) {
+  const rawList = Array.isArray(cfg?.accounts) ? cfg.accounts : undefined
+  const list = rawList ?? [{
+    name: 'default',
+    appId: typeof cfg?.appId === 'string' ? cfg.appId.trim() : '',
+    secretRef: cfg?.secretRef ?? DEFAULT_SECRET_REF,
+  }]
+  const seen = new Set()
+  return list.map((item, index) => {
+    const name = typeof item?.name === 'string' && item.name.trim() ? item.name.trim() : (rawList ? '' : 'default')
+    if (rawList && !name) {
+      throw new Error(`dsh-wechat-mp: accounts[${index}].name 必填（非空字符串）`)
+    }
+    if (seen.has(name)) throw new Error(`dsh-wechat-mp: 账号名重复：${JSON.stringify(name)}`)
+    seen.add(name)
+    const appId = typeof item?.appId === 'string' ? item.appId.trim() : ''
+    let secretRef = typeof item?.secretRef === 'string' ? item.secretRef.trim() : ''
+    if (!secretRef) {
+      secretRef = name === 'default' ? DEFAULT_SECRET_REF : `WECHAT_MP_${name.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_SECRET`
+    }
+    if (!isCredentialRefName(secretRef)) {
+      throw new Error(`dsh-wechat-mp: 账号 ${name} 的 secretRef 必须是环境变量名形态（${REF_PATTERN}），收到 ${JSON.stringify(item?.secretRef)}`)
+    }
+    return { name, appId, secretRef }
+  })
+}
+
+/**
+ * 正文预检（V0.3.0）：字符数 / 体积 / 图片格式白名单。
+ * 纯函数。issues 分两级：level 'error' = 必须处置（超限/未知格式），
+ * level 'warn' = 可自动处置（webp：装了 sharp 会自动转 jpg）。
+ * @returns {{ok: boolean, chars: number, bytes: number, issues: Array<{level:string,code:string,message:string,hint?:string}>, images: Array<{src:string,ext:string,ok:boolean}>}}
+ */
+export function precheckContent(html) {
+  const text = typeof html === 'string' ? html : ''
+  const plain = text.replace(/<[^>]*>/g, '')
+  const chars = [...plain].length
+  const bytes = Buffer.byteLength(text, 'utf8')
+  const issues = []
+  const images = []
+  if (chars > PRECHECK_MAX_CHARS) {
+    issues.push({
+      level: 'error', code: 'chars_over_limit',
+      message: `正文字符数 ${chars} 超过公众号上限 ${PRECHECK_MAX_CHARS}`,
+      hint: `删减约 ${chars - PRECHECK_MAX_CHARS} 字符后再推（45002 就是这个原因）`,
+    })
+  }
+  if (bytes >= PRECHECK_MAX_BYTES) {
+    issues.push({
+      level: 'error', code: 'bytes_over_limit',
+      message: `正文体积 ${(bytes / 1024 / 1024).toFixed(2)}MB 超过公众号上限 ${PRECHECK_MAX_BYTES / 1024 / 1024}MB`,
+      hint: '压缩图片、拆分章节后再推',
+    })
+  }
+  const srcRe = /<img\b[^>]*?\bsrc\s*=\s*"([^"]+)"/gi
+  for (const match of text.matchAll(srcRe)) {
+    const src = match[1]
+    const ext = imageSrcExtension(src)
+    const ok = PRECHECK_IMAGE_EXTENSIONS.includes(ext)
+    images.push({ src, ext, ok })
+    if (!ok) {
+      if (ext === 'webp') {
+        issues.push({
+          level: 'warn', code: 'image_webp',
+          message: `正文含 webp 图片：${src}`,
+          hint: '安装可选依赖 sharp（bun add sharp / npm i sharp）后 draft-create 会自动转 jpg；否则请手工转成 jpg/png',
+        })
+      } else {
+        issues.push({
+          level: 'error', code: `image_bad_format${ext ? `_${ext}` : ''}`,
+          message: `正文图片格式不在白名单（jpg/jpeg/png/gif/bmp）：${src}${ext ? `（识别为 ${ext}）` : '（无法识别格式）'}`,
+          hint: ext === 'svg' ? '公众号不支持 svg，转成 png/jpg' : '转成 jpg/png/gif/bmp 且文件名带扩展名',
+        })
+      }
+    }
+  }
+  return { ok: issues.every((x) => x.level !== 'error'), chars, bytes, issues, images }
+}
+
+/** 从图片 src 猜扩展名（URL 路径 / data URL mime）。猜不出返回 ''。 */
+export function imageSrcExtension(src) {
+  const text = String(src ?? '')
+  const data = /^data:image\/([a-z0-9.+-]+)[;,]/i.exec(text)
+  if (data) return (DATA_URL_MIME_TO_EXT[data[1].toLowerCase()] ?? data[1].toLowerCase()).replace('jpeg', 'jpg')
+  let pathname = text
+  try { pathname = new URL(text, 'http://placeholder.invalid').pathname } catch { /* 相对路径原样 */ }
+  const ext = extname(pathname).toLowerCase().replace(/^\./, '').replace('jpeg', 'jpg')
+  return /^[a-z0-9]{1,5}$/.test(ext) ? ext : ''
 }
 
 function normalizeApiBase(raw) {
@@ -174,6 +283,9 @@ export function mapWxError(errcode, errmsg) {
  *   config?: object,
  *   fetchImpl?: typeof fetch,
  *   readFileImpl?: (path: string) => Promise<Uint8Array|string>,
+ *   writeFileImpl?: (path: string, data: string|Uint8Array) => Promise<void>,
+ *   mkdirImpl?: (dir: string) => Promise<void>,
+ *   convertWebpImpl?: (input: {bytes: Uint8Array, filename: string}) => Promise<{bytes: Uint8Array, filename: string, contentType: string}>,
  *   resolveCredential?: (ref: string) => Promise<{value?: string}|string|undefined>,
  *   now?: () => number,
  * }} [opts]
@@ -184,10 +296,17 @@ export function createSemantics(opts = {}) {
     : resolveConfig(opts.config ?? {})
   const doFetch = opts.fetchImpl ?? globalThis.fetch
   const readFile = opts.readFileImpl ?? (async (path) => new Uint8Array(await fsReadFile(path)))
+  const writeFile = opts.writeFileImpl ?? (async (path, data) => { await fsWriteFile(path, data) })
+  const mkdir = opts.mkdirImpl ?? (async (dir) => { await fsMkdir(dir, { recursive: true }) })
+  const convertWebp = opts.convertWebpImpl ?? defaultConvertWebp
   const resolveCredential = opts.resolveCredential ?? (async () => undefined)
   const now = opts.now ?? Date.now
   /** @type {Map<string, {token: string, expiresAt: number}>} */
   const tokenCache = new Map()
+  // 账号表（多账号）：resolveConfig 已归一；兜底一份旧形态
+  const accounts = Array.isArray(config.accounts) && config.accounts.length
+    ? config.accounts
+    : [{ name: 'default', appId: config.appId ?? '', secretRef: config.secretRef ?? DEFAULT_SECRET_REF }]
 
   const success = (message, data) => ({ ok: true, message, ...(data ?? {}) })
   const failure = (code, message, hint) => ({ ok: false, code, message, ...(hint ? { hint } : {}) })
@@ -206,23 +325,34 @@ export function createSemantics(opts = {}) {
     }
   }
 
-  // ---- 凭据 ----
+  // ---- 凭据（多账号：args.account 选账号，缺省第一个） ----
 
-  async function appIdValue() {
-    if (config.appId) return config.appId
-    const resolved = await resolveCredential(DEFAULT_APPID_REF)
+  /** 按名字选账号；缺省 = 第一个（旧单账号即 default）。未知名字明确报错并列出可用账号。 */
+  function pickAccount(args) {
+    const wanted = typeof args?.account === 'string' ? args.account.trim() : ''
+    if (!wanted) return accounts[0]
+    const hit = accounts.find((a) => a.name === wanted)
+    if (!hit) {
+      throw new WechatMpError('unknown_account', `未知公众号账号：${JSON.stringify(wanted)}`, `可用账号：${accounts.map((a) => a.name).join('、')}`)
+    }
+    return hit
+  }
+
+  async function appIdValue(account) {
+    if (account.appId) return account.appId
+    const resolved = await resolveCredential(account.appIdRef ?? DEFAULT_APPID_REF)
     const value = String((resolved && typeof resolved === 'object' ? resolved.value : resolved) ?? '').trim()
     if (!value) {
-      throw new WechatMpError('missing_appid', '未配置公众号 AppID', '打开「设置 → 公众号」填写 AppID，或在凭据中保存 WECHAT_MP_APPID')
+      throw new WechatMpError('missing_appid', `未配置公众号 AppID（账号 ${account.name}）`, '打开「设置 → 公众号」填写 AppID，或在凭据中保存 WECHAT_MP_APPID')
     }
     return value
   }
 
-  async function secretValue() {
-    const resolved = await resolveCredential(config.secretRef)
+  async function secretValue(account) {
+    const resolved = await resolveCredential(account.secretRef)
     const value = String((resolved && typeof resolved === 'object' ? resolved.value : resolved) ?? '').trim()
     if (!value) {
-      throw new WechatMpError('missing_secret', `未配置公众号 AppSecret：凭据 ${config.secretRef} 为空`, '打开「设置 → 公众号」粘贴并保存 AppSecret（插件只从凭据库读取，配置里不存明文）')
+      throw new WechatMpError('missing_secret', `未配置公众号 AppSecret（账号 ${account.name}）：凭据 ${account.secretRef} 为空`, '打开「设置 → 公众号」粘贴并保存 AppSecret（插件只从凭据库读取，配置里不存明文）')
     }
     return value
   }
@@ -235,7 +365,7 @@ export function createSemantics(opts = {}) {
   }
 
   async function requestJson(url, { method = 'GET', json, form } = {}) {
-    const headers = { 'User-Agent': 'dsh-wechat-mp/0.1.0' }
+    const headers = { 'User-Agent': 'dsh-wechat-mp/0.3.0' }
     let body
     if (json !== undefined) {
       headers['Content-Type'] = 'application/json'
@@ -261,14 +391,16 @@ export function createSemantics(opts = {}) {
     }
   }
 
-  async function getToken({ force = false } = {}) {
-    const appId = await appIdValue()
-    const key = `${config.apiBase}\u0000${appId}`
+  async function getToken({ account, force = false } = {}) {
+    const acct = account ?? accounts[0]
+    const appId = await appIdValue(acct)
+    // token 缓存按账号隔离（apiBase + 账号名 + appId）
+    const key = `${config.apiBase}\u0000${acct.name}\u0000${appId}`
     const cached = tokenCache.get(key)
     if (!force && cached && cached.expiresAt - TOKEN_EXPIRY_MARGIN_MS > now()) {
       return { appId, key, token: cached.token, expiresAt: cached.expiresAt }
     }
-    const secret = await secretValue()
+    const secret = await secretValue(acct)
     const body = await requestJson(`${config.apiBase}/cgi-bin/stable_token`, {
       method: 'POST',
       json: { grant_type: 'client_credential', appid: appId, secret, force_refresh: false },
@@ -284,10 +416,10 @@ export function createSemantics(opts = {}) {
     return { appId, key, token, expiresAt }
   }
 
-  async function apiCall(path, { method = 'POST', json, form, query } = {}) {
+  async function apiCall(path, { method = 'POST', json, form, query } = {}, account) {
     let lastAppId = ''
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      const { appId, key, token } = await getToken({ force: attempt > 0 })
+      const { appId, key, token } = await getToken({ account, force: attempt > 0 })
       lastAppId = appId
       const url = new URL(`${config.apiBase}${path}`)
       if (query) {
@@ -310,7 +442,40 @@ export function createSemantics(opts = {}) {
 
   // ---- 图片 ----
 
-  async function uploadImage({ bytes, filename, contentType }) {
+  // ---- webp → jpg（可选依赖 sharp；缺失时明确报错，不做硬依赖） ----
+
+  /** webp 侦测：magic bytes 优先，其次扩展名/content-type。 */
+  function isWebp({ bytes, filename, contentType }) {
+    if (bytes instanceof Uint8Array && bytes.length > 12
+      && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46
+      && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) return true
+    if (String(contentType ?? '').toLowerCase() === 'image/webp') return true
+    return extname(String(filename ?? '')).toLowerCase() === '.webp'
+  }
+
+  /** 缺省转换实现：动态 import('sharp')——装了就自动转 jpg，没装明确报错提示安装。 */
+  async function defaultConvertWebp({ bytes, filename }) {
+    let sharp
+    try {
+      sharp = (await import('sharp')).default
+    } catch {
+      throw new WechatMpError('webp_convert_unavailable',
+        'webp 图片需要转换成 jpg，但可选依赖 sharp 未安装',
+        '安装一次即可：bun add sharp（或 npm i sharp）；或先把 webp 手工转成 jpg/png 再传')
+    }
+    const stem = basename(String(filename || 'image')).replace(/\.webp$/i, '') || 'image'
+    const jpeg = await sharp(Buffer.from(bytes)).jpeg({ quality: 90 }).toBuffer()
+    return { bytes: new Uint8Array(jpeg), filename: `${stem}.jpg`, contentType: 'image/jpeg' }
+  }
+
+  /** 上传前归一：webp 自动转 jpg（转换器可用时），其余原样。 */
+  async function normalizeForUpload(image) {
+    if (!isWebp(image)) return image
+    const converted = await convertWebp({ bytes: image.bytes, filename: image.filename || 'image.webp' })
+    return { ...image, ...converted }
+  }
+
+  async function uploadImage({ bytes, filename, contentType }, account) {
     const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes ?? [])
     if (data.length === 0) throw new WechatMpError('empty_image', '图片内容为空')
     if (data.length > config.maxImageBytes) {
@@ -323,7 +488,7 @@ export function createSemantics(opts = {}) {
     }
     const form = new FormData()
     form.append('media', new Blob([data], { type: normalized.contentType }), normalized.filename)
-    const { body } = await apiCall('/cgi-bin/material/add_material', { form, query: { type: 'image' } })
+    const { body } = await apiCall('/cgi-bin/material/add_material', { form, query: { type: 'image' } }, account)
     const mediaId = String(body?.media_id ?? '')
     const url = String(body?.url ?? '')
     if (!mediaId || !url) throw new WechatMpError('upload_missing_fields', '素材上传响应缺少 media_id/url', '微信接口异常，稍后重试')
@@ -376,7 +541,7 @@ export function createSemantics(opts = {}) {
 
   const IMG_SRC_PATTERN = /<img\b[^>]*?\bsrc\s*=\s*"([^"]+)"/gi
 
-  async function localizeImages(html, baseDir) {
+  async function localizeImages(html, baseDir, account) {
     const sources = []
     for (const match of html.matchAll(IMG_SRC_PATTERN)) {
       const src = match[1]
@@ -387,24 +552,24 @@ export function createSemantics(opts = {}) {
     const uploaded = []
     for (const src of sources) {
       const image = await loadImage(src, baseDir)
-      const up = await uploadImage(image)
+      const up = await uploadImage(await normalizeForUpload(image), account)
       out = out.split(src).join(up.url)
       uploaded.push({ source: src, url: up.url, mediaId: up.mediaId })
     }
     return { html: out, uploaded }
   }
 
-  async function ensureThumb(args, baseDir) {
+  async function ensureThumb(args, baseDir, account) {
     const mediaId = strArg(args.thumbMediaId)
     if (mediaId) return { mediaId, uploaded: null }
     const thumbFile = strArg(args.thumbFile)
     if (thumbFile) {
-      const up = await uploadImage(await loadImage(thumbFile, baseDir))
+      const up = await uploadImage(await normalizeForUpload(await loadImage(thumbFile, baseDir)), account)
       return { mediaId: up.mediaId, uploaded: up }
     }
     const thumbUrl = strArg(args.thumbUrl)
     if (thumbUrl) {
-      const up = await uploadImage(await loadImage(thumbUrl, baseDir))
+      const up = await uploadImage(await normalizeForUpload(await loadImage(thumbUrl, baseDir)), account)
       return { mediaId: up.mediaId, uploaded: up }
     }
     throw new WechatMpError('missing_thumb', '缺少封面：公众号草稿接口要求 thumb_media_id（永久素材）', '提供 thumbMediaId（已有素材）/ thumbFile（本地图片）/ thumbUrl（网络图片，后两者自动上传为永久素材）')
@@ -467,15 +632,25 @@ export function createSemantics(opts = {}) {
     const { html, baseDir } = await resolveContent(args)
     const body = extractBody(html)
     if (!body) throw new WechatMpError('empty_content', '正文为空')
-    const localized = args.inlineImages === false ? { html: body, uploaded: [] } : await localizeImages(body, baseDir)
-    const thumb = await ensureThumb(args, baseDir)
+    // fail-fast 预检（error 级问题直接拒，省一轮草稿往返；warn 级 webp 交给自动转换）
+    const report = precheckContent(body)
+    const errors = report.issues.filter((x) => x.level === 'error')
+    if (errors.length > 0) {
+      throw new WechatMpError('precheck_failed',
+        `正文预检未通过：${errors[0].message}`,
+        errors.map((x) => x.hint).filter(Boolean).join('；') || '按提示处置正文后重试')
+    }
+    const account = pickAccount(args)
+    const localized = args.inlineImages === false ? { html: body, uploaded: [] } : await localizeImages(body, baseDir, account)
+    const thumb = await ensureThumb(args, baseDir, account)
     return { title, body: localized.html, uploaded: localized.uploaded, thumbMediaId: thumb.mediaId, article: buildArticle({ title, body: localized.html, mediaId: thumb.mediaId, args }) }
   }
 
   // ---- 工具语义 ----
 
-  const status = guard(async () => {
-    const { appId, expiresAt } = await getToken()
+  const status = guard(async (args) => {
+    const account = pickAccount(args)
+    const { appId, expiresAt } = await getToken({ account })
     const minutes = Math.max(0, Math.round((expiresAt - now()) / 60_000))
     return success(`公众号凭据可用：appId=${maskAppId(appId)}，access_token 约剩 ${minutes} 分钟`, {
       appId: maskAppId(appId),
@@ -487,13 +662,14 @@ export function createSemantics(opts = {}) {
   const uploadImageTool = guard(async (args) => {
     const sources = ['file', 'url', 'dataUrl'].map((k) => strArg(args[k])).filter(Boolean)
     if (sources.length !== 1) throw new WechatMpError('bad_source', 'file / url / dataUrl 必须且只能给一个')
-    const up = await uploadImage(await loadImage(sources[0], process.cwd()))
+    const account = pickAccount(args)
+    const up = await uploadImage(await normalizeForUpload(await loadImage(sources[0], process.cwd())), account)
     return success(`图片已上传为永久素材：media_id=${up.mediaId}`, { mediaId: up.mediaId, url: up.url, filename: up.filename })
   })
 
   const draftCreate = guard(async (args) => {
     const prepared = await prepareDraft(args)
-    const { body } = await apiCall('/cgi-bin/draft/add', { json: { articles: [prepared.article] } })
+    const { body } = await apiCall('/cgi-bin/draft/add', { json: { articles: [prepared.article] } }, pickAccount(args))
     const mediaId = String(body?.media_id ?? '')
     if (!mediaId) throw new WechatMpError('draft_missing_media_id', '草稿创建响应缺少 media_id', '微信接口异常，稍后重试')
     const images = prepared.uploaded.length ? `，替换正文图片 ${prepared.uploaded.length} 张` : ''
@@ -510,13 +686,13 @@ export function createSemantics(opts = {}) {
     if (!oldMediaId) throw new WechatMpError('missing_media_id', '缺少 mediaId', '先用 wechat-mp-draft-list 查目标草稿的 media_id')
     const prepared = await prepareDraft(args)
     // 先建新、再删旧：add 失败时旧草稿仍在（delete+add 顺序会在失败窗口里丢稿）
-    const { body } = await apiCall('/cgi-bin/draft/add', { json: { articles: [prepared.article] } })
+    const { body } = await apiCall('/cgi-bin/draft/add', { json: { articles: [prepared.article] } }, pickAccount(args))
     const newMediaId = String(body?.media_id ?? '')
     if (!newMediaId) throw new WechatMpError('draft_missing_media_id', '草稿创建响应缺少 media_id', '微信接口异常，稍后重试')
     let removed = true
     let warning
     try {
-      await apiCall('/cgi-bin/draft/delete', { json: { media_id: oldMediaId } })
+      await apiCall('/cgi-bin/draft/delete', { json: { media_id: oldMediaId } }, pickAccount(args))
     } catch (error) {
       removed = false
       warning = error instanceof WechatMpError ? `旧草稿删除失败（${error.code}）：草稿箱里可能同时存在新旧两份，可手工删除` : '旧草稿删除失败'
@@ -532,7 +708,7 @@ export function createSemantics(opts = {}) {
   const draftList = guard(async (args) => {
     const offset = intArg(args.offset, 0, 0, 1_000_000, 'offset')
     const count = intArg(args.count, DRAFT_BATCHGET_MAX, 1, DRAFT_BATCHGET_MAX, 'count')
-    const { body } = await apiCall('/cgi-bin/draft/batchget', { json: { offset, count } })
+    const { body } = await apiCall('/cgi-bin/draft/batchget', { json: { offset, count } }, pickAccount(args))
     const items = Array.isArray(body?.item) ? body.item : []
     const list = items.map((item) => {
       const news = Array.isArray(item?.content?.news_item) ? item.content.news_item[0] : undefined
@@ -552,14 +728,14 @@ export function createSemantics(opts = {}) {
   const draftDelete = guard(async (args) => {
     const mediaId = strArg(args.mediaId)
     if (!mediaId) throw new WechatMpError('missing_media_id', '缺少 mediaId', '先用 wechat-mp-draft-list 查草稿 id')
-    await apiCall('/cgi-bin/draft/delete', { json: { media_id: mediaId } })
+    await apiCall('/cgi-bin/draft/delete', { json: { media_id: mediaId } }, pickAccount(args))
     return success(`草稿已删除：media_id=${mediaId}`, { mediaId })
   })
 
   const publish = guard(async (args) => {
     const mediaId = strArg(args.mediaId)
     if (!mediaId) throw new WechatMpError('missing_media_id', '缺少 mediaId', '先建草稿（wechat-mp-draft-create）或从草稿箱列表取 id')
-    const { body } = await apiCall('/cgi-bin/freepublish/submit', { json: { media_id: mediaId } })
+    const { body } = await apiCall('/cgi-bin/freepublish/submit', { json: { media_id: mediaId } }, pickAccount(args))
     const publishId = String(body?.publish_id ?? '')
     if (!publishId) throw new WechatMpError('publish_missing_id', '发布提交响应缺少 publish_id', '微信接口异常，稍后重试')
     return success(`已提交发布：publish_id=${publishId}（异步审核/发布中，用 wechat-mp-publish-status 查结果）`, { publishId, mediaId })
@@ -578,7 +754,7 @@ export function createSemantics(opts = {}) {
   const publishStatus = guard(async (args) => {
     const publishId = strArg(args.publishId)
     if (!publishId) throw new WechatMpError('missing_publish_id', '缺少 publishId', 'wechat-mp-publish 返回的 publish_id')
-    const { body } = await apiCall('/cgi-bin/freepublish/get', { json: { publish_id: publishId } })
+    const { body } = await apiCall('/cgi-bin/freepublish/get', { json: { publish_id: publishId } }, pickAccount(args))
     const statusCode = Number(body?.publish_status ?? -1)
     const articleUrl = String(body?.article_detail?.item?.[0]?.article_url ?? '')
     const text = PUBLISH_STATE[statusCode] ?? `未知状态（publish_status=${body?.publish_status ?? '?'}）`
@@ -591,7 +767,69 @@ export function createSemantics(opts = {}) {
     })
   })
 
-  return { status, uploadImage: uploadImageTool, draftCreate, draftUpdate, draftList, draftDelete, publish, publishStatus }
+  // ---- V0.3.0 新工具：正文预检 + Markdown 渲染 ----
+
+  const precheck = guard(async (args) => {
+    const { html, baseDir } = await resolveContent(args)
+    const report = precheckContent(html)
+    const errorCount = report.issues.filter((x) => x.level === 'error').length
+    const warnCount = report.issues.filter((x) => x.level === 'warn').length
+    const message = errorCount + warnCount === 0
+      ? `预检通过：正文 ${report.chars} 字符（上限 ${PRECHECK_MAX_CHARS}），体积 ${(report.bytes / 1024).toFixed(1)}KB（上限 1MB），${report.images.length} 张图片全部在格式白名单内`
+      : `预检发现问题：${errorCount} 个错误、${warnCount} 个警告（正文 ${report.chars} 字符 / ${(report.bytes / 1024).toFixed(1)}KB）`
+    return { ok: errorCount === 0, code: errorCount > 0 ? 'precheck_failed' : 'precheck_passed', message, ...report, issues: report.issues, hint: report.issues.find((x) => x.hint)?.hint }
+  })
+
+  const render = guard(async (args) => {
+    const markdown = typeof args.markdown === 'string' && args.markdown.trim() ? args.markdown : ''
+    const mdFile = strArg(args.mdFile)
+    if ((markdown && mdFile) || (!markdown && !mdFile)) {
+      throw new WechatMpError('bad_arg', 'markdown（字符串）与 mdFile（文件路径）二选一')
+    }
+    let source = markdown
+    let baseDir = process.cwd()
+    let defaultStem = 'wechat-mp-article'
+    if (mdFile) {
+      const filePath = isAbsolute(mdFile) ? mdFile : resolvePath(process.cwd(), mdFile)
+      let raw
+      try {
+        raw = await readFile(filePath)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        throw new WechatMpError('md_read_failed', `读取 Markdown 文件失败：${filePath}（${message}）`)
+      }
+      source = typeof raw === 'string' ? raw : Buffer.from(raw).toString('utf8')
+      baseDir = dirname(filePath)
+      defaultStem = basename(filePath).replace(/\.(md|markdown|txt)$/i, '') || defaultStem
+    }
+    const title = strArg(args.title) || extractFrontmatter(source).attrs.title || ''
+    if (!title) {
+      throw new WechatMpError('missing_title', '缺少标题：title 参数或 frontmatter 的 title 字段至少给一个', '公众号草稿标题必填')
+    }
+    const html = renderMarkdown(source, { title })
+    // 渲染即预检：error 级问题拒绝落文件（warn 级 webp 只提醒）
+    const report = precheckContent(html)
+    const errors = report.issues.filter((x) => x.level === 'error')
+    if (errors.length > 0) {
+      throw new WechatMpError('precheck_failed', `渲染结果预检未通过：${errors[0].message}`, errors.map((x) => x.hint).filter(Boolean).join('；'))
+    }
+    const outFileRaw = strArg(args.outFile) || resolvePath(baseDir, `${defaultStem}.html`)
+    const outPath = isAbsolute(outFileRaw) ? outFileRaw : resolvePath(process.cwd(), outFileRaw)
+    await mkdir(dirname(outPath))
+    await writeFile(outPath, html, 'utf8')
+    const warns = report.issues.filter((x) => x.level === 'warn')
+    const message = `已渲染公众号 HTML：${outPath}（${report.chars} 字符 / ${(report.bytes / 1024).toFixed(1)}KB${warns.length ? `；${warns.length} 条警告：${warns.map((w) => w.code).join('、')}` : ''}）`
+    return success(message, {
+      outFile: outPath,
+      title,
+      chars: report.chars,
+      bytes: report.bytes,
+      warnings: warns,
+      contentFile: outPath,
+    })
+  })
+
+  return { status, uploadImage: uploadImageTool, draftCreate, draftUpdate, draftList, draftDelete, publish, publishStatus, precheck, render }
 }
 
 /**
