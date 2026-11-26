@@ -100,6 +100,35 @@ svc2.pushPreview({ ...art, title: '第二篇', html: '<p>2</p>' })
 const pv3 = await call(svc2, 'preview')
 assert(pv3.title === '第二篇' && pv3.sent === false, 'pushPreview 覆盖旧预览并重置发送状态')
 
+// ---- 用户自主来源：draftList / loadDraft / loadFile ----
+const svc3 = createSettingsService({
+  ctx: makeFakeCtx(), config,
+  makeSemantics: () => ({
+    draftList: async (args) => ({ ok: true, message: '草稿箱共 1 篇', total: 1, items: [{ mediaId: 'M1', title: '箱内文', updateTime: '2026-11-26' }] }),
+    draftGet: async (args) => ({ ok: true, message: '草稿详情：箱内文', mediaId: args.mediaId, title: '箱内文', content: '<p>箱内正文</p>', author: '乙', digest: 'd', thumbMediaId: 'TH', sourceUrl: '' }),
+    preview: async (args) => (args.contentFile
+      ? { ok: true, message: '预览已推送', title: args.title, html: '<p>文件正文</p>', chars: 4, bytes: 15, warnings: [], author: '', digest: '', sourceUrl: '', thumbMediaId: '', thumbFile: '', thumbUrl: '', account: '', inlineImages: true, needOpenComment: false, onlyFansCanComment: false }
+      : { ok: false, code: 'missing_title', message: '缺少标题' }),
+  }),
+})
+
+const dl = await call(svc3, 'draftList')
+assert(dl.ok === true && dl.items.length === 1 && dl.items[0].mediaId === 'M1', 'draftList 委托语义核')
+const loadNoId = await call(svc3, 'loadDraft')
+assert(loadNoId.ok === false && loadNoId.message.includes('mediaId'), 'loadDraft 缺 mediaId 被拒')
+const ld = await call(svc3, 'loadDraft', { mediaId: 'M1' })
+assert(ld.ok === true && ld.message.includes('箱内文'), 'loadDraft 拉取成功')
+const ldp = await call(svc3, 'preview')
+assert(ldp.empty === false && ldp.html === '<p>箱内正文</p>' && ldp.source === '草稿箱 M1' && ldp.thumbMediaId === 'TH', 'loadDraft 写入预览暂存（含来源与封面素材）')
+const lfNoFile = await call(svc3, 'loadFile')
+assert(lfNoFile.ok === false, 'loadFile 缺路径被拒')
+const lf = await call(svc3, 'loadFile', { file: '/tmp/a.html', title: '文件文' })
+assert(lf.ok === true, 'loadFile html 路径成功')
+const lfp = await call(svc3, 'preview')
+assert(lfp.title === '文件文' && lfp.source === '文件 /tmp/a.html', 'loadFile 覆盖预览（来源=文件）')
+const lfMd = await call(svc3, 'loadFile', { file: '/tmp/b.md' })
+assert(lfMd.ok === false && lfMd.code === 'missing_title', 'loadFile markdown 无标题 → 走 preview 校验拒绝')
+
 // handleRequest 同源守卫与 405
 const fakeReq = (method, origin, host, body) => {
   const listeners = { data: [], end: [] }

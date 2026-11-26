@@ -70,6 +70,17 @@ window.__ModuleLoader__.load({
         previewSendOkLead: '已推送到草稿箱（未发表）：',
         previewSendFail: '推送失败：',
         previewSentBadge: '已推送',
+        previewSourceLabel: '自己动手预览：从草稿箱拉取，或加载本地 Markdown / HTML 文件',
+        previewDraftFetch: '拉取草稿列表',
+        previewDraftFetching: '拉取中…',
+        previewDraftEmpty: '草稿箱为空（或凭据/白名单未就绪）。',
+        previewDraftLoad: (t) => `预览：${t}`,
+        previewFileLabel: '本地文件路径（.md / .html / .txt）',
+        previewFilePlaceholder: '/path/to/article.md',
+        previewFileTitle: '标题（Markdown 无 frontmatter title 时必填）',
+        previewFileLoad: '从文件加载',
+        previewLoading: '加载中…',
+        previewSource: (s) => `来源：${s}`,
       },
       en: {
         section: "WeChat Official Account",
@@ -126,6 +137,17 @@ window.__ModuleLoader__.load({
         previewSendOkLead: 'Pushed to the draft box (not published): ',
         previewSendFail: 'Send failed: ',
         previewSentBadge: 'Sent',
+        previewSourceLabel: 'Preview on your own: pull from the draft box, or load a local Markdown / HTML file',
+        previewDraftFetch: 'Fetch draft list',
+        previewDraftFetching: 'Fetching…',
+        previewDraftEmpty: 'Draft box is empty (or credentials / IP allowlist are not ready).',
+        previewDraftLoad: (t) => `Preview: ${t}`,
+        previewFileLabel: 'Local file path (.md / .html / .txt)',
+        previewFilePlaceholder: '/path/to/article.md',
+        previewFileTitle: 'Title (required for Markdown without a frontmatter title)',
+        previewFileLoad: 'Load file',
+        previewLoading: 'Loading…',
+        previewSource: (s) => `Source: ${s}`,
       },
     }
 
@@ -369,6 +391,9 @@ window.__ModuleLoader__.load({
         const [busy, setBusy] = useState(null)
         const [result, setResult] = useState(null) // { ok, text }
         const [confirmSend, setConfirmSend] = useState(false)
+        const [drafts, setDrafts] = useState(null) // 草稿箱列表（用户点「拉取」后）
+        const [filePath, setFilePath] = useState('')
+        const [fileTitle, setFileTitle] = useState('')
 
         const refresh = useCallback(async () => {
           const res = await apiCall('preview')
@@ -410,6 +435,45 @@ window.__ModuleLoader__.load({
           }
         }
 
+        async function onFetchDrafts() {
+          setBusy('drafts')
+          try {
+            const res = await apiCall('draftList', {})
+            if (res.ok === true) {
+              setDrafts(Array.isArray(res.items) ? res.items : [])
+              setResult({ ok: true, text: String(res.message ?? '') })
+            } else {
+              setResult({ ok: false, text: `${String(res.message ?? 'failed')}${res.hint ? `\n${res.hint}` : ''}` })
+            }
+          } finally {
+            setBusy(null)
+          }
+        }
+
+        async function onLoadDraft(mediaId, title) {
+          setBusy(`draft:${mediaId}`)
+          try {
+            const res = await apiCall('loadDraft', { mediaId })
+            setResult({ ok: res.ok === true, text: res.ok ? t.t('previewDraftLoad')(title || mediaId) : `${String(res.message ?? 'failed')}${res.hint ? `\n${res.hint}` : ''}` })
+            if (res.ok === true) await refresh()
+          } finally {
+            setBusy(null)
+          }
+        }
+
+        async function onLoadFile() {
+          const file = filePath.trim()
+          if (!file) return
+          setBusy('file')
+          try {
+            const res = await apiCall('loadFile', { file, title: fileTitle.trim() || undefined })
+            setResult({ ok: res.ok === true, text: res.ok ? String(res.message ?? '') : `${String(res.message ?? 'failed')}${res.hint ? `\n${res.hint}` : ''}` })
+            if (res.ok === true) await refresh()
+          } finally {
+            setBusy(null)
+          }
+        }
+
         const hasCover = Boolean(pv && (pv.thumbMediaId || pv.thumbFile || pv.thumbUrl))
         const sent = pv?.sent === true
         return h('div', { className: 'dshwmp' },
@@ -423,6 +487,37 @@ window.__ModuleLoader__.load({
           !pv && !loadError
             ? h('div', { className: 'dshwmp-result', role: 'status' }, t.t('previewEmpty'))
             : null,
+          h('div', { className: 'dshwmp-card', key: 'source' },
+            h('div', { className: 'dshwmp-note' }, t.t('previewSourceLabel')),
+            h('div', { className: 'dshwmp-head' },
+              h('button', { className: 'dshwmp-btn', type: 'button', disabled: busy !== null, onClick: () => { void onFetchDrafts() } },
+                busy === 'drafts' ? t.t('previewDraftFetching') : t.t('previewDraftFetch')),
+              Array.isArray(drafts) && drafts.length === 0 ? h('span', { className: 'dshwmp-hint' }, t.t('previewDraftEmpty')) : null),
+            Array.isArray(drafts) && drafts.length > 0
+              ? h('div', { role: 'listbox', 'aria-label': t.t('previewDraftFetch') },
+                  drafts.map((d) => h('button', {
+                    key: d.mediaId, className: 'dshwmp-btn', type: 'button', role: 'option',
+                    'aria-selected': 'false', disabled: busy !== null,
+                    style: { width: '100%', textAlign: 'left', display: 'flex', justifyContent: 'space-between', gap: 8 },
+                    onClick: () => { void onLoadDraft(d.mediaId, d.title) },
+                  },
+                    h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, String(d.title || d.mediaId)),
+                    h('span', { style: { flexShrink: 0, opacity: 0.7 } }, String(d.updateTime ?? '').slice(0, 10)))))
+              : null,
+            h('div', { className: 'dshwmp-head' },
+              h('label', { className: 'dshwmp-label', htmlFor: 'dshwmp-file' }, t.t('previewFileLabel')),
+              h('input', {
+                id: 'dshwmp-file', className: 'dshwmp-input', value: filePath,
+                onChange: (e) => setFilePath(e.target.value), placeholder: t.t('previewFilePlaceholder'), autocomplete: 'off',
+              })),
+            h('div', { className: 'dshwmp-head' },
+              h('label', { className: 'dshwmp-label', htmlFor: 'dshwmp-file-title' }, t.t('previewFileTitle')),
+              h('input', {
+                id: 'dshwmp-file-title', className: 'dshwmp-input', value: fileTitle,
+                onChange: (e) => setFileTitle(e.target.value), autocomplete: 'off',
+              }),
+              h('button', { className: 'dshwmp-btn', type: 'button', disabled: busy !== null || !filePath.trim(), onClick: () => { void onLoadFile() } },
+                busy === 'file' ? t.t('previewLoading') : t.t('previewFileLoad')))),
           pv ? [
             h('div', { className: 'dshwmp-card', key: 'meta' },
               h('div', { className: 'dshwmp-meta' },
@@ -432,7 +527,8 @@ window.__ModuleLoader__.load({
                 typeof pv.chars === 'number' ? h('span', { className: 'dshwmp-badge dshwmp-badge-neutral' }, t.t('previewChars')(pv.chars, ((pv.bytes ?? 0) / 1024).toFixed(1))) : null,
                 Array.isArray(pv.warnings) && pv.warnings.length > 0 ? h('span', { className: 'dshwmp-badge dshwmp-badge-bad' }, t.t('previewWarn')(pv.warnings.length)) : null),
               pv.author ? h('div', { className: 'dshwmp-note' }, t.t('previewAuthor')(pv.author)) : null,
-              pv.digest ? h('div', { className: 'dshwmp-note' }, t.t('previewDigest')(pv.digest)) : null),
+              pv.digest ? h('div', { className: 'dshwmp-note' }, t.t('previewDigest')(pv.digest)) : null,
+              pv.source ? h('div', { className: 'dshwmp-note' }, t.t('previewSource')(pv.source)) : null),
 
             h('div', { className: 'dshwmp-frame-wrap', key: 'body' },
               h('iframe', {

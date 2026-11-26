@@ -197,6 +197,66 @@ export function createSettingsService({ ctx, config, makeSemantics }) {
     return res
   }
 
+  // ---- 用户自主操作：预览来源不依赖 agent ----
+  // loadDraft：从公众号草稿箱拉一篇详情进预览；loadFile：读本地 Markdown/HTML 文件进预览。
+  // 都走 makeSemantics（读当前 config），凭据缺失/网络失败会以 {ok:false,message,hint} 返回。
+
+  async function rpcDraftList(args) {
+    const sem = makeSemantics({ ...current })
+    return sem.draftList({ offset: args?.offset, count: args?.count, account: args?.account })
+  }
+
+  async function rpcLoadDraft(args) {
+    const mediaId = typeof args?.mediaId === 'string' ? args.mediaId.trim() : ''
+    if (!mediaId) return { ok: false, message: '缺少 mediaId：先「拉取草稿列表」再选一篇' }
+    const sem = makeSemantics({ ...current })
+    const res = await sem.draftGet({ mediaId, account: args?.account })
+    if (res?.ok !== true || typeof res.content !== 'string' || res.content === '') return res
+    pushPreview({
+      title: res.title || '(无标题)',
+      html: res.content,
+      author: res.author || '',
+      digest: res.digest || '',
+      sourceUrl: res.sourceUrl || '',
+      thumbMediaId: res.thumbMediaId || '',
+      thumbFile: '',
+      thumbUrl: '',
+      account: args?.account || '',
+      inlineImages: true,
+      needOpenComment: false,
+      onlyFansCanComment: false,
+      source: `草稿箱 ${mediaId}`,
+    })
+    return { ok: true, message: `已加载草稿进预览：${res.title || mediaId}` }
+  }
+
+  async function rpcLoadFile(args) {
+    const file = typeof args?.file === 'string' ? args.file.trim() : ''
+    if (!file) return { ok: false, message: '缺少文件路径：支持 .md / .markdown / .txt（按 Markdown 渲染）与 .html（直读正文）' }
+    const isHtml = /\.html?$/i.test(file)
+    const sem = makeSemantics({ ...current })
+    const res = await sem.preview(isHtml
+      ? { contentFile: file, title: args?.title }
+      : { mdFile: file, title: args?.title })
+    if (res?.ok !== true) return res
+    pushPreview({
+      title: res.title,
+      html: res.html,
+      author: res.author || '',
+      digest: res.digest || '',
+      sourceUrl: res.sourceUrl || '',
+      thumbMediaId: res.thumbMediaId || '',
+      thumbFile: res.thumbFile || '',
+      thumbUrl: res.thumbUrl || '',
+      account: '',
+      inlineImages: true,
+      needOpenComment: false,
+      onlyFansCanComment: false,
+      source: `文件 ${file}`,
+    })
+    return { ok: true, message: `已加载文件进预览：${res.title}（${res.chars} 字符）` }
+  }
+
   const METHODS = {
     get: rpcGet,
     save: rpcSave,
@@ -205,6 +265,9 @@ export function createSettingsService({ ctx, config, makeSemantics }) {
     test: rpcTest,
     preview: rpcPreview,
     send: rpcSend,
+    draftList: rpcDraftList,
+    loadDraft: rpcLoadDraft,
+    loadFile: rpcLoadFile,
   }
 
   function handleRequest(req, res) {

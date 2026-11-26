@@ -725,6 +725,24 @@ export function createSemantics(opts = {}) {
     return success(`草稿箱共 ${total} 篇（本页 ${list.length} 篇）`, { total, items: list })
   })
 
+  const draftGet = guard(async (args) => {
+    const mediaId = strArg(args.mediaId)
+    if (!mediaId) throw new WechatMpError('missing_media_id', '缺少 mediaId', '先用 wechat-mp-draft-list 查草稿 id')
+    const { body } = await apiCall('/cgi-bin/draft/get', { json: { media_id: mediaId } }, pickAccount(args))
+    const news = Array.isArray(body?.news_item) ? body.news_item[0] : undefined
+    if (!news) throw new WechatMpError('draft_empty', '草稿详情为空或结构不符', '确认 media_id 存在（wechat-mp-draft-list 核对）')
+    return success(`草稿详情：${String(news.title ?? '')}`, {
+      mediaId,
+      title: String(news.title ?? ''),
+      author: String(news.author ?? ''),
+      digest: String(news.digest ?? ''),
+      content: String(news.content ?? ''),
+      thumbMediaId: String(news.thumb_media_id ?? ''),
+      sourceUrl: String(news.content_source_url ?? ''),
+      url: String(news.url ?? ''),
+    })
+  })
+
   const draftDelete = guard(async (args) => {
     const mediaId = strArg(args.mediaId)
     if (!mediaId) throw new WechatMpError('missing_media_id', '缺少 mediaId', '先用 wechat-mp-draft-list 查草稿 id')
@@ -895,7 +913,7 @@ export function createSemantics(opts = {}) {
     })
   })
 
-  return { status, uploadImage: uploadImageTool, draftCreate, draftUpdate, draftList, draftDelete, publish, publishStatus, precheck, render, preview }
+  return { status, uploadImage: uploadImageTool, draftCreate, draftUpdate, draftList, draftGet, draftDelete, publish, publishStatus, precheck, render, preview }
 }
 
 /**

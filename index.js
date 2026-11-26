@@ -128,6 +128,11 @@ export function apply(ctx, config) {
       }),
     sem.draftList)
 
+  register('wechat-mp-draft-get',
+    '取一篇草稿的完整详情（标题/作者/摘要/正文 HTML/封面素材/原文链接）。配合 wechat-mp-draft-list 用的 mediaId。免审。',
+    WITH_ACCOUNT({ mediaId: { type: 'string', description: '草稿 media_id' } }, ['mediaId']),
+    sem.draftGet)
+
   register('wechat-mp-draft-delete',
     '删除一篇公众号草稿（未发表内容，可由正文重建）。免审。',
     WITH_ACCOUNT({ mediaId: { type: 'string', description: '草稿 media_id' } }, ['mediaId']),
