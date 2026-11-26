@@ -593,15 +593,18 @@ window.__ModuleLoader__.load({
         const t = makeT(ctx)
         const Page = makePage(ctx, t)
         const PreviewPage = makePreviewPage(ctx, t)
-        ctx.slots.inject('settings.section', () => ctx.slots.register({
-          name: 'settings.section', id: 'dsh-wechat-mp-preview', order: 64, label: () => t.t('previewSection'),
+        // 预览是侧边栏面板（与工作区文件/终端/浏览器同列）：sidebar.panellist 出图标，
+        // main 按面板 id 分发中央面板主体。
+        ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
+          name: 'sidebar.panellist', id: 'dsh-wechat-mp-preview', order: 80, label: () => t.t('previewSection'),
+        }, PreviewIcon))
+        ctx.slots.inject('main', () => ctx.slots.register({
+          name: 'main', key: 'dsh-wechat-mp-preview',
         }, PreviewPage))
+        // 凭据配置仍在设置页
         ctx.slots.inject('settings.section', () => ctx.slots.register({
           name: 'settings.section', id: 'dsh-wechat-mp', order: 65, label: () => t.t('section'),
         }, Page))
-        ctx.slots.inject('settings.section.icon', () => ctx.slots.register({
-          name: 'settings.section.icon', id: 'dsh-wechat-mp-preview',
-        }, PreviewIcon))
         ctx.slots.inject('settings.section.icon', () => ctx.slots.register({
           name: 'settings.section.icon', id: 'dsh-wechat-mp',
         }, SectionIcon))
