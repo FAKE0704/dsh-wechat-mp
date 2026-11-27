@@ -52,6 +52,12 @@ export const WECHAT_MP_SKILL_CONTENT = `# 公众号文章交付规范（dsh-wech
   \`draft-list\` 逐篇给「N. 标题（mediaId=xxx）」，\`draft-get\`/\`draft-create\`/\`draft-update\` 的 message 都带 mediaId——直接从 message 取 id，不要试图解析结构化 JSON，也不要翻历史会话。
 - 预检（\`wechat-mp-precheck\`）：error 级问题必须处置后再推；warn 级（webp）交给自动转换。
 
+## 改稿（从草稿箱拉回全文）
+
+- \`wechat-mp-draft-get { mediaId, outFile: "<path>" }\`：正文全文 HTML 落盘到该本地文件，message 回路径与字符数——用 read 工具查看后改；不给 outFile 时只有一行摘要（mediaId/封面/作者/160 字预览）。
+- md 源稿还在工作区时优先改 md，走 render → preview → draft-update；源稿丢了才从草稿箱拉回全文。
+- 改完 \`wechat-mp-draft-update { mediaId, contentFile: <新 HTML> }\`：不给封面自动沿用旧草稿封面，不再被引用的旧封面素材自动清理。
+
 ## 红线
 
 - 禁止把本地 \`.md\`/\`.html\` 当最终交付物宣布完成。

@@ -793,18 +793,30 @@ export function createSemantics(opts = {}) {
     const title = String(news.title ?? '')
     const author = String(news.author ?? '')
     const thumbMediaId = String(news.thumb_media_id ?? '')
-    // message 带上 mediaId/封面/作者等关键字段（content 太长留在结构化字段，UI 可见）
+    const content = String(news.content ?? '')
+    // message 带关键字段 + 短正文预览（去标签截 160 字，模型不落盘也能认出是哪篇）；
+    // 全文 HTML 太长不进 message——给 outFile 时落盘回路径（改稿拉回全文的正路）
+    const preview = content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160)
+    let outFile = ''
+    const outRaw = strArg(args.outFile)
+    if (outRaw) {
+      outFile = isAbsolute(outRaw) ? outRaw : resolvePath(process.cwd(), outRaw)
+      await mkdir(dirname(outFile))
+      await writeFile(outFile, content, 'utf8')
+    }
+    const outFileNote = outFile ? `；全文 ${content.length} 字符已写入 ${outFile}（read 工具查看/改稿）` : (preview ? `；正文预览：${preview}${content.length > preview.length ? '…' : ''}` : '')
     return success(
-      `草稿详情：${title || '（无标题）'}（mediaId=${mediaId}${thumbMediaId ? `，封面 thumbMediaId=${thumbMediaId}` : '，无封面'}${author ? `，作者 ${author}` : ''}）`,
+      `草稿详情：${title || '（无标题）'}（mediaId=${mediaId}${thumbMediaId ? `，封面 thumbMediaId=${thumbMediaId}` : '，无封面'}${author ? `，作者 ${author}` : ''}）${outFileNote}`,
       {
         mediaId,
         title,
         author,
         digest: String(news.digest ?? ''),
-        content: String(news.content ?? ''),
+        content,
         thumbMediaId,
         sourceUrl: String(news.content_source_url ?? ''),
         url: String(news.url ?? ''),
+        ...(outFile ? { contentFile: outFile, contentChars: content.length } : {}),
       },
     )
   })

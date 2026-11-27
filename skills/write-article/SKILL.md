@@ -86,6 +86,8 @@ description: CreatorStack 公众号长文写作——按 editorial 的支柱骨�
 
 两个分支共同点：**绝不自动发布不可撤销的内容**；骨架/语气/合规纪律完全一致。
 
+改已有草稿（DSH）：md 源稿还在就改 md，走 render → preview → `draft-update`（封面自动沿用）；源稿丢了用 `wechat-mp-draft-get { mediaId, outFile }` 把全文 HTML 拉回本地看/改。
+
 ## 交付前自检清单
 
 - [ ] 标题字符数 ≤24、导语 ≤50

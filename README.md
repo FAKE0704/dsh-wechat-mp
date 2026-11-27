@@ -71,7 +71,7 @@ Secret 只用于换 `access_token`，token 只在进程内缓存，不落盘、�
 | `wechat-mp-draft-create` | 新建草稿（自动封面 + 正文图片转素材 + 入口预检 fail-fast） | 免审 |
 | `wechat-mp-draft-update` | 替换草稿（先建新、成功后再删旧；旧稿删不掉只告警）；**缺封面自动沿用旧草稿封面**（V0.5.0） | 免审 |
 | `wechat-mp-draft-list` | 草稿箱列表（media_id/标题/作者/更新时间，分页 ≤20）；message 逐篇带「标题（mediaId）」 | 免审 |
-| `wechat-mp-draft-get` | 草稿详情（标题/作者/摘要/正文 HTML/封面素材/原文链接）；message 带 mediaId 与封面 | 免审 |
+| `wechat-mp-draft-get` | 草稿详情（标题/作者/摘要/正文 HTML/封面素材/原文链接）；message 带 mediaId/封面/作者 + 160 字预览；`outFile` 把全文 HTML 落盘回路径（改稿拉回全文） | 免审 |
 | `wechat-mp-draft-delete` | 删草稿 | 免审 |
 | `wechat-mp-publish` | 提交发布（`freepublish`，异步），回 `publish_id` | **ask** |
 | `wechat-mp-publish-status` | 发布状态（发布中/成功/失败/审核不通过）+ 文章链接 | 免审 |

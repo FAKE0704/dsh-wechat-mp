@@ -405,6 +405,49 @@ describe('工具输出 lossless 边界 + message 摘要（V0.5.0）', () => {
     expect(r.message).toContain('封面 thumbMediaId=thumb_9')
     expect(r.message).toContain('作者 乙')
   })
+
+  test('draft-get outFile → 全文 HTML 落盘回路径（改稿拉回全文，吸收 fetch_draft.py）', async () => {
+    let written = null
+    const sem = createSemantics({
+      config: resolveConfig({ accounts: [{ name: 'a', appId: 'wxAAA', secretRef: 'SECRET_A' }], apiBase: 'https://fake.invalid' }),
+      fetchImpl: async (url) => {
+        const u = String(url)
+        if (u.includes('stable_token')) return new Response(JSON.stringify({ access_token: 'tok', expires_in: 7200 }), { status: 200 })
+        if (u.includes('draft/get')) return new Response(JSON.stringify({ news_item: [{ title: '长文', thumb_media_id: 't1', content: '<p>正文HTML全文</p>' }] }), { status: 200 })
+        return new Response(JSON.stringify({ errcode: 0 }), { status: 200 })
+      },
+      writeFileImpl: async (p, d) => { written = { path: p, data: d } },
+      mkdirImpl: async () => {},
+      resolveCredential: okCred(new Map([['SECRET_A', 'sec-a']])),
+      now: () => 1_000_000,
+    })
+    const r = await sem.draftGet({ mediaId: 'mid_x', outFile: 'out/draft.html' })
+    expect(r.ok).toBe(true)
+    expect(r.content).toBe('<p>正文HTML全文</p>')
+    expect(r.contentFile).toBe(written.path)
+    expect(r.contentFile.endsWith('out/draft.html')).toBe(true)
+    expect(r.message).toContain(`全文 ${r.contentChars} 字符已写入`)
+    expect(r.message).toContain(r.contentFile)
+  })
+
+  test('draft-get 不给 outFile → 不落盘，message 只带 ≤160 字预览', async () => {
+    const sem = createSemantics({
+      config: resolveConfig({ accounts: [{ name: 'a', appId: 'wxAAA', secretRef: 'SECRET_A' }], apiBase: 'https://fake.invalid' }),
+      fetchImpl: async (url) => {
+        const u = String(url)
+        if (u.includes('stable_token')) return new Response(JSON.stringify({ access_token: 'tok', expires_in: 7200 }), { status: 200 })
+        if (u.includes('draft/get')) return new Response(JSON.stringify({ news_item: [{ title: '长文', content: `<p>${'字'.repeat(300)}</p>` }] }), { status: 200 })
+        return new Response(JSON.stringify({ errcode: 0 }), { status: 200 })
+      },
+      resolveCredential: okCred(new Map([['SECRET_A', 'sec-a']])),
+      now: () => 1_000_000,
+    })
+    const r = await sem.draftGet({ mediaId: 'mid_x' })
+    expect(r.ok).toBe(true)
+    expect(r.message).toContain('正文预览：')
+    expect(r.message).toContain('…')
+    expect(r.contentFile).toBeUndefined() // 没给 outFile 就不落盘
+  })
 })
 
 describe('draft-update 封面沿用与孤儿素材清理（V0.5.0）', () => {

@@ -133,8 +133,11 @@ export function apply(ctx, config) {
     sem.draftList)
 
   register('wechat-mp-draft-get',
-    '取一篇草稿的完整详情（标题/作者/摘要/正文 HTML/封面素材/原文链接）。配合 wechat-mp-draft-list 用的 mediaId。免审。',
-    WITH_ACCOUNT({ mediaId: { type: 'string', description: '草稿 media_id' } }, ['mediaId']),
+    '取一篇草稿的完整详情（标题/作者/摘要/正文 HTML/封面素材/原文链接）。message 带 mediaId/封面/作者与 160 字正文预览；要全文时给 outFile——正文 HTML 落盘到该本地文件并回路径（read 工具查看/改稿）。配合 wechat-mp-draft-list 用的 mediaId。免审。',
+    WITH_ACCOUNT({
+      mediaId: { type: 'string', description: '草稿 media_id' },
+      outFile: { type: 'string', description: '可选：正文全文 HTML 落盘到该本地文件（改稿拉回全文用）；相对路径按当前目录解析，父目录自动创建' },
+    }, ['mediaId']),
     sem.draftGet)
 
   register('wechat-mp-draft-delete',
