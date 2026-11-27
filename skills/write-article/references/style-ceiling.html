@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>内联样式上限测试 v2</title></head>
+<body>
+<p style="font-size:16px;line-height:1.82;color:#2B312F;margin:0 8px 22px">第二版：按上一轮反馈改了 3/5/10/13/14 五条，其余保持不变。请重点看这五条，其他可以只看不动。</p>
+
+<section style="margin:0 8px 26px">
+<p style="font-size:13px;font-weight:700;color:#8A9691;letter-spacing:1px;margin:0 0 8px">A01 行内代码 · code 标签</p>
+<p style="font-size:16px;line-height:1.82;color:#2B312F;margin:0">命令 <code style="font-family:Menlo,Consolas,monospace;background:#1D4ED8;color:#FFD84D;padding:2px 7px;border-radius:4px;font-size:14px">npm run typeset</code> 的样式。</p>
+</section>
+
+<section style="margin:0 8px 26px">
+<p style="font-size:13px;font-weight:700;color:#8A9691;letter-spacing:1px;margin:0 0 8px">A02 行内代码 · span 模拟</p>
+<p style="font-size:16px;line-height:1.82;color:#2B312F;margin:0">命令 <span style="font-family:Menlo,Consolas,monospace;background:#1D4ED8;color:#FFD84D;padding:2px 7px;border-radius:4px;font-size:14px">npm run typeset</span> 的样式。</p>
+</section>
+
+<section style="margin:0 8px 26px">
+<p style="font-size:13px;font-weight:700;color:#8A9691;letter-spacing:1px;margin:0 0 8px">A03 外链（加下划虚线）</p>
+<p style="font-size:16px;line-height:1.82;color:#2B312F;margin:0">这是<a href="https://example.com" style="color:#2F7A68;text-decoration:none"><span style="color:#2F7A68;border-bottom:1px dashed rgba(47,122,104,0.6)">一个普通外链</span></a>，看是否有「链接感」。</p>
+</section>
+
+<section style="margin:0 8px 26px">
+<p style="font-size:13px;font-weight:700;color:#8A9691;letter-spacing:1px;margin:0 0 8px">A04 公众号内链（跳过）</p>
+<p style="font-size:14px;line-height:1.8;color:#7A8783;margin:0">伪造的 mp.weixin.qq.com 链接会被微信以 45166 拒收，等有真实文章链接再测。</p>
+</section>
+
+<section style="margin:0 8px 26px">
+<p style="font-size:13px;font-weight:700;color:#8A9691;letter-spacing:1px;margin:0 0 8px">A05 渐变卡片（蓝 → 黄）</p>
+<section style="background:linear-gradient(135deg,#BFD9FF 0%,#FFE9A6 100%);border-radius:14px;padding:18px 20px"><p style="font-size:15px;line-height:1.8;color:#1F3145;margin:0">蓝到黄的斜向渐变，看这一段整体是否真的有色阶变化。</p></section>
+</section>
+
+<section style="margin:0 8px 26px">
+<p style="font-size:13px;font-weight:700;color:#8A9691;letter-spacing:1px;margin:0 0 8px">A06 阴影卡片</p>
+<section style="background:#FFFFFF;border:1px solid #E6ECE9;border-radius:14px;padding:18px 20px;box-shadow:0 6px 18px rgba(31,77,64,0.08)"><p style="font-size:15px;line-height:1.8;color:#2B312F;margin:0">白底 + 细边 + 投影。</p></section>
+</section>
+
+<section style="margin:0 8px 26px">
+<p style="font-size:13px;font-weight:700;color:#8A9691;letter-spacing:1px;margin:0 0 8px">A07 引用卡</p>
+<section style="border-left:4px solid #3F7669;background:#F5F9F7;padding:14px 18px;border-radius:0 10px 10px 0"><p style="font-size:15px;line-height:1.8;color:#33453F;margin:0">左边色条 + 浅底 + 右侧圆角。</p></section>
+</section>
+
+<section style="margin:0 8px 26px">
+<p style="font-size:13px;font-weight:700;color:#8A9691;letter-spacing:1px;margin:0 0 8px">A08 数字徽章标题</p>
+<p style="font-size:19px;line-height:1.5;font-weight:800;color:#1F4D40;margin:0"><span style="display:inline-block;width:30px;height:30px;line-height:30px;text-align:center;background:#3F7669;color:#FFFFFF;border-radius:9px;font-size:15px;margin-right:10px">01</span>章节标题带编号块</p>
+</section>
+
+<section style="margin:0 8px 26px">
+<p style="font-size:13px;font-weight:700;color:#8A9691;letter-spacing:1px;margin:0 0 8px">A09 标签徽章</p>
+<p style="font-size:16px;line-height:2;color:#2B312F;margin:0"><span style="display:inline-block;background:#E8F4EF;color:#2F7A68;border-radius:999px;padding:2px 12px;font-size:13px;margin-right:6px">实测</span><span style="display:inline-block;background:#FDF0E8;color:#C0612B;border-radius:999px;padding:2px 12px;font-size:13px;margin-right:6px">待验证</span><span style="display:inline-block;background:#EDEFF3;color:#4A5568;border-radius:999px;padding:2px 12px;font-size:13px">已废弃</span></p>
+</section>
+
+<section style="margin:0 8px 26px">
+<p style="font-size:13px;font-weight:700;color:#8A9691;letter-spacing:1px;margin:0 0 8px">A10 表格美化（表头黄色；已去掉斑马纹）</p>
+<section style="border-radius:12px;overflow:hidden;border:1px solid #E9DDBB">
+<table style="width:100%;border-collapse:collapse;font-size:14px;table-layout:fixed">
+<thead><tr><th style="padding:10px 12px;background-color:#F7C948;color:#4A3400;font-weight:700;text-align:left">元素</th><th style="padding:10px 12px;background-color:#F7C948;color:#4A3400;font-weight:700;text-align:left">状态</th></tr></thead>
+<tbody>
+<tr><td style="padding:10px 12px;background-color:#FFFFFF;color:#2B312F;border-top:1px solid #F0E7CF">表头黄色</td><td style="padding:10px 12px;background-color:#FFFFFF;color:#8A5A1E;border-top:1px solid #F0E7CF">待确认</td></tr>
+<tr><td style="padding:10px 12px;background-color:#FFFFFF;color:#2B312F;border-top:1px solid #F0E7CF">第二行（全白）</td><td style="padding:10px 12px;background-color:#FFFFFF;color:#8A5A1E;border-top:1px solid #F0E7CF">待确认</td></tr>
+<tr><td style="padding:10px 12px;background-color:#FFFFFF;color:#2B312F;border-top:1px solid #F0E7CF">第三行</td><td style="padding:10px 12px;background-color:#FFFFFF;color:#8A5A1E;border-top:1px solid #F0E7CF">待确认</td></tr>
+</tbody></table>
+</section>
+</section>
+
+<section style="margin:0 8px 26px">
+<p style="font-size:13px;font-weight:700;color:#8A9691;letter-spacing:1px;margin:0 0 8px">A11 代码块</p>
+<pre style="background:#1F2B28;color:#DCE7E3;border-radius:12px;padding:16px 18px;font-size:13px;line-height:1.7;overflow-x:auto;margin:0"><code style="font-family:Menlo,Consolas,monospace">$ npm run typeset -- draft.md --out out
+→ 状态：就绪（可复制）</code></pre>
+</section>
+
+<section style="margin:0 8px 26px">
+<p style="font-size:13px;font-weight:700;color:#8A9691;letter-spacing:1px;margin:0 0 8px">A12 分隔线</p>
+<p style="font-size:16px;line-height:1.82;color:#2B312F;margin:0 0 10px">上面一条渐变线，下面一条虚线。</p>
+<section style="height:2px;background:linear-gradient(90deg,#3F7669 0%,#A8C8BD 60%,rgba(168,200,189,0) 100%);border-radius:2px;margin:14px 0"></section>
+<section style="border-top:1px dashed #C9D6D1;margin:14px 0 0"></section>
+</section>
+
+<section style="margin:0 8px 26px">
+<p style="font-size:13px;font-weight:700;color:#8A9691;letter-spacing:1px;margin:0 0 8px">A13 高亮文字（蓝 → 黄）</p>
+<p style="font-size:16px;line-height:1.9;color:#2B312F;margin:0">这句话里<span style="background:linear-gradient(90deg,#BFD9FF 0%,#FFE9A6 100%)">有一段被荧光笔划过的重点</span>，这次色阶更明显一点。</p>
+</section>
+
+<section style="margin:0 8px 26px">
+<p style="font-size:13px;font-weight:700;color:#8A9691;letter-spacing:1px;margin:0 0 8px">A14 渐变文字（原方案 vs 双色替代）</p>
+<p style="font-size:22px;line-height:1.5;font-weight:800;margin:0 0 10px;background:linear-gradient(90deg,#3F7669,#F7C948);-webkit-background-clip:text;background-clip:text;color:transparent">渐变文字效果（原方案）</p>
+<p style="font-size:20px;line-height:1.5;font-weight:800;margin:0"><span style="color:#2F7A68">双色</span><span style="color:#C0612B">强调</span><span style="color:#2F7A68">替代方案</span></p>
+</section>
+
+<section style="margin:0 8px 26px">
+<p style="font-size:13px;font-weight:700;color:#8A9691;letter-spacing:1px;margin:0 0 8px">A15 图片圆角与图注</p>
+<img src="https://picsum.photos/seed/ceiling2/640/260" alt="测试图" style="width:100%;border-radius:14px;display:block;margin:0 0 8px">
+<p style="font-size:13px;line-height:1.6;color:#8A9691;text-align:center;margin:0">图注：圆角 + 居中说明文字</p>
+</section>
+
+<section style="margin:0 8px 26px">
+<p style="font-size:13px;font-weight:700;color:#8A9691;letter-spacing:1px;margin:0 0 8px">A16 提示框</p>
+<section style="background:#FFF7E6;border:1px solid #F3D9A6;border-radius:12px;padding:14px 16px"><p style="font-size:15px;line-height:1.8;color:#7A5A18;margin:0"><strong>注意：</strong>带底色的提示框，适合放风险提醒和前置条件。</p></section>
+</section>
+
+<section style="margin:0 8px 26px">
+<p style="font-size:13px;font-weight:700;color:#8A9691;letter-spacing:1px;margin:0 0 8px">A17 步骤条</p>
+<section style="padding-left:26px;border-left:2px solid #DCE7E3;margin-left:6px">
+<p style="font-size:15px;line-height:1.8;color:#2B312F;margin:0 0 14px;position:relative"><span style="position:absolute;left:-33px;top:6px;width:10px;height:10px;border-radius:50%;background:#3F7669"></span><strong>第一步</strong>：写稿落盘</p>
+<p style="font-size:15px;line-height:1.8;color:#2B312F;margin:0;position:relative"><span style="position:absolute;left:-33px;top:6px;width:10px;height:10px;border-radius:50%;background:#A8C8BD"></span><strong>第二步</strong>：排版并直推草稿箱</p>
+</section>
+</section>
+
+<section style="margin:0 8px 26px">
+<p style="font-size:13px;font-weight:700;color:#8A9691;letter-spacing:1px;margin:0 0 8px">A18 首字下沉</p>
+<p style="font-size:16px;line-height:1.82;color:#2B312F;margin:0"><span style="float:left;font-size:46px;line-height:40px;font-weight:800;color:#3F7669;margin:2px 10px 0 0">排</span>版这件事，细节决定观感。</p>
+</section>
+
+<section style="margin:0 8px 26px">
+<p style="font-size:13px;font-weight:700;color:#8A9691;letter-spacing:1px;margin:0 0 8px">A19 大引号引用</p>
+<section style="background:#F7F9F8;border-radius:14px;padding:24px 22px 18px;position:relative"><span style="position:absolute;left:14px;top:2px;font-size:54px;line-height:1;color:#CFE0DA;font-weight:800">“</span><p style="font-size:16px;line-height:1.85;color:#33453F;margin:10px 0 0">引号做成装饰，比默认引号更容易被读者注意到。</p></section>
+</section>
+
+<section style="margin:0 8px 26px">
+<p style="font-size:13px;font-weight:700;color:#8A9691;letter-spacing:1px;margin:0 0 8px">A20 对照 · 普通段落</p>
+<p style="font-size:16px;line-height:1.82;color:#2B312F;margin:0">这是没有任何额外样式的普通段落，作为对照组。</p>
+</section>
+</body>
+</html>
