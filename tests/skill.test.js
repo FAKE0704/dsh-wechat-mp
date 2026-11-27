@@ -22,6 +22,9 @@ describe('loadBundledSkill（skills/ 目录文件形态 skill）', () => {
     expect(s.content).toContain('资源索引')
     expect(s.content).toMatch(/references\/editorial\.md` → .+editorial\.md（/)
     expect(s.content).not.toContain('## 1. 账号定位') // 全文未内联
+    // instructions.md（暗色卡片排版语法）同样进索引，且带渐进阅读条件
+    expect(s.content).toContain('references/instructions.md')
+    expect(s.content).toContain('渐进阅读条件')
     expect(s.resourceBase?.kind).toBe('directory')
     expect(s.resourceBase?.path.endsWith('skills/write-article')).toBe(true)
     // 交付链按环境二选一：DSH 分支走插件工具链，真源机命令标注不可用
