@@ -1,6 +1,6 @@
 {
   "name": "dsh-wechat-mp",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "type": "module",
   "main": "index.js",
   "description": "微信公众号文章 dsh 插件：草稿箱/发布/图片素材十工具（直连微信 API，零宿主依赖，publish 过审批门）。AppID/AppSecret 在「设置 → 公众号」页配置，Secret 只存 dsh 凭据库。",

@@ -450,44 +450,51 @@ describe('工具输出 lossless 边界 + message 摘要（V0.5.0）', () => {
   })
 })
 
-describe('draft-update 封面沿用与孤儿素材清理（V0.5.0）', () => {
+describe('draft-update 原位更新 / 回落重建 / 封面沿用与清理（V0.6.0）', () => {
   const BASE_ROUTES = (extra = []) => [
     ['draft/get', { news_item: [{ title: '旧标题', thumb_media_id: 'old_thumb' }] }],
+    ['draft/update', { errcode: 0 }],
     ['draft/add', { media_id: 'new_mid' }],
     ['draft/delete', { errcode: 0 }],
     ['del_material', { errcode: 0 }],
     ...extra,
   ]
 
-  test('缺 thumb 参数 → 回读旧草稿封面沿用，不新传素材', async () => {
+  test('缺 thumb 参数 → 回读旧封面沿用，官方接口原位更新（media_id 不变）', async () => {
     const { sem, calls } = makeRoutedSem(BASE_ROUTES())
     const r = await sem.draftUpdate({ mediaId: 'old_mid', title: '新标题', content: '<p>x</p>' })
     expect(r.ok).toBe(true)
-    expect(r.mediaId).toBe('new_mid')
+    expect(r.mode).toBe('inplace')
+    expect(r.mediaId).toBe('old_mid')
     expect(r.thumbMediaId).toBe('old_thumb')
     expect(r.reusedThumbMediaId).toBe('old_thumb')
-    expect(r.message).toContain('封面沿用旧草稿素材')
-    // draft/get 读旧封面；draft/add 的 articles 里 thumb_media_id = 旧值
+    expect(r.message).toContain('原位更新')
+    expect(r.message).toContain('media_id 不变=old_mid')
     expect(countCalls(calls, 'draft/get')).toBe(1)
-    const addCall = calls.find((c) => c.includes('draft/add'))
-    expect(addCall).toContain('old_thumb')
+    const updCall = calls.find((c) => c.includes('draft/update'))
+    expect(updCall).toContain('old_thumb')
+    expect(countCalls(calls, 'draft/add')).toBe(0) // 原位更新不重建
+    expect(countCalls(calls, 'draft/delete')).toBe(0)
     expect(countCalls(calls, 'add_material')).toBe(0) // 没有重传封面素材
     expect(countCalls(calls, 'del_material')).toBe(0) // 沿用中的素材不清理
   })
 
-  test('给了新封面 thumbFile → 上传新素材；旧素材无其他引用时被清理', async () => {
+  test('给了新封面 thumbFile → 原位更新上传新素材；旧素材无引用时被清理', async () => {
     const { sem, calls } = makeRoutedSem(BASE_ROUTES([
       ['add_material', { media_id: 'new_thumb', url: 'https://mmbiz.qpic.cn/new.jpg' }],
       ['draft/batchget', { total_count: 0, item: [] }], // 箱里已无其他草稿引用旧封面
     ]))
     const r = await sem.draftUpdate({ mediaId: 'old_mid', title: '新标题', content: '<p>x</p>', thumbFile: '/tmp/cover.png' })
     expect(r.ok).toBe(true)
+    expect(r.mode).toBe('inplace')
+    expect(r.mediaId).toBe('old_mid')
     expect(r.thumbMediaId).toBe('new_thumb')
     expect(r.releasedThumbMediaId).toBe('old_thumb')
     expect(r.message).toContain('旧封面素材已清理')
     expect(countCalls(calls, 'add_material')).toBe(1)
     const delCall = calls.find((c) => c.includes('del_material'))
     expect(delCall).toContain('old_thumb')
+    expect(countCalls(calls, 'draft/add')).toBe(0)
   })
 
   test('旧封面仍被其他草稿引用 → 不清理（防误删共享素材）', async () => {
@@ -500,15 +507,38 @@ describe('draft-update 封面沿用与孤儿素材清理（V0.5.0）', () => {
     ]))
     const r = await sem.draftUpdate({ mediaId: 'old_mid', title: '新标题', content: '<p>x</p>', thumbFile: '/tmp/cover.png' })
     expect(r.ok).toBe(true)
-    expect(r.thumbMediaId).toBe('new_thumb')
+    expect(r.mode).toBe('inplace')
     expect(r.releasedThumbMediaId).toBeUndefined()
     expect(countCalls(calls, 'del_material')).toBe(0)
   })
 
-  test('旧草稿删除失败 → 旧稿仍引用封面，跳过清理', async () => {
+  test('draft/update 失败 → 回落建新删旧重建（mode=recreate）', async () => {
+    const routes = [
+      ['draft/get', { news_item: [{ title: '旧标题', thumb_media_id: 'old_thumb' }] }],
+      ['draft/update', { errcode: 40007, errmsg: 'invalid media_id' }],
+      ['draft/add', { media_id: 'new_mid' }],
+      ['draft/delete', { errcode: 0 }],
+      ['del_material', { errcode: 0 }],
+    ]
+    const { sem, calls } = makeRoutedSem(routes)
+    const r = await sem.draftUpdate({ mediaId: 'old_mid', title: '新标题', content: '<p>x</p>' })
+    expect(r.ok).toBe(true)
+    expect(r.mode).toBe('recreate')
+    expect(r.mediaId).toBe('new_mid')
+    expect(r.replacedMediaId).toBe('old_mid')
+    expect(r.removed).toBe(true)
+    expect(r.message).toContain('回落')
+    expect(r.message).toContain('封面沿用旧草稿素材')
+    const addCall = calls.find((c) => c.includes('draft/add'))
+    expect(addCall).toContain('old_thumb')
+    expect(countCalls(calls, 'del_material')).toBe(0) // 沿用中的素材不清理
+  })
+
+  test('回落路径旧草稿删除失败 → 跳过孤儿清理（旧稿仍引用封面）', async () => {
     const routes = [
       ['draft/get', { news_item: [{ title: '旧标题', thumb_media_id: 'old_thumb' }] }],
       ['add_material', { media_id: 'new_thumb', url: 'https://mmbiz.qpic.cn/new.jpg' }],
+      ['draft/update', { errcode: 40007, errmsg: 'invalid media_id' }],
       ['draft/add', { media_id: 'new_mid' }],
       ['draft/delete', { errcode: 40007, errmsg: 'invalid media_id' }],
       ['del_material', { errcode: 0 }],
@@ -516,6 +546,7 @@ describe('draft-update 封面沿用与孤儿素材清理（V0.5.0）', () => {
     const { sem, calls } = makeRoutedSem(routes)
     const r = await sem.draftUpdate({ mediaId: 'old_mid', title: '新标题', content: '<p>x</p>', thumbFile: '/tmp/cover.png' })
     expect(r.ok).toBe(true)
+    expect(r.mode).toBe('recreate')
     expect(r.removed).toBe(false)
     expect(r.warning).toContain('旧草稿删除失败')
     expect(countCalls(calls, 'del_material')).toBe(0)
@@ -525,11 +556,139 @@ describe('draft-update 封面沿用与孤儿素材清理（V0.5.0）', () => {
   test('旧草稿已不存在（封面读不到）+ 缺 thumb → 原样报 missing_thumb', async () => {
     const { sem, calls } = makeRoutedSem([
       ['draft/get', { errcode: 40007, errmsg: 'invalid media_id' }],
+      ['draft/update', { errcode: 0 }],
       ['draft/add', { media_id: 'new_mid' }],
     ])
     const r = await sem.draftUpdate({ mediaId: 'ghost_mid', title: '新标题', content: '<p>x</p>' })
     expect(r.ok).toBe(false)
     expect(r.code).toBe('missing_thumb')
     expect(countCalls(calls, 'draft/add')).toBe(0)
+    expect(countCalls(calls, 'draft/update')).toBe(0)
+  })
+})
+
+describe('publish-list（freepublish/batchget；仅认证账号，V0.6.0）', () => {
+  test('message 逐篇带「N. 标题（articleId=…，链接）」与总数', async () => {
+    const { sem } = makeRoutedSem([
+      ['freepublish/batchget', {
+        total_count: 1,
+        item_count: 1,
+        item: [{
+          article_id: 'art_1',
+          update_time: 1627891234,
+          content: { news_item: [{ title: '已发文', url: 'https://mp.weixin.qq.com/s/abc', is_deleted: false }] },
+        }],
+      }],
+    ])
+    const r = await sem.publishList({})
+    expect(r.ok).toBe(true)
+    expect(r.total).toBe(1)
+    expect(r.items[0].articleId).toBe('art_1')
+    expect(r.items[0].updateTime).toContain('2021-08-02')
+    expect(r.message).toContain('已发布列表共 1 篇')
+    expect(r.message).toContain('1. 已发文（articleId=art_1，https://mp.weixin.qq.com/s/abc）')
+  })
+
+  test('已删除文章标记【已删除】；分页参数校验', async () => {
+    const { sem } = makeRoutedSem([
+      ['freepublish/batchget', {
+        total_count: 1,
+        item: [{ article_id: 'art_2', content: { news_item: [{ title: '被删的文', is_deleted: true }] } }],
+      }],
+    ])
+    const r = await sem.publishList({ offset: 20, count: 5 })
+    expect(r.message).toContain('【已删除】')
+    expect(r.message).toContain('（本页 1 篇）')
+    const bad = await sem.publishList({ count: 50 })
+    expect(bad.ok).toBe(false)
+    expect(bad.code).toBe('bad_arg')
+  })
+})
+
+describe('会话工作目录锚定（call.anchor，V0.6.0）', () => {
+  test('render outFile 相对路径按 anchor 解析（不再落 profile 目录）', async () => {
+    let written = null
+    const sem = createSemantics({
+      config: resolveConfig({}),
+      writeFileImpl: async (p, d) => { written = { path: p, data: d } },
+      mkdirImpl: async () => {},
+    })
+    const r = await sem.render({ markdown: '# 标题', title: 'T', outFile: 'out/a.html' }, { anchor: '/tmp/workspace' })
+    expect(r.ok).toBe(true)
+    expect(written.path).toBe('/tmp/workspace/out/a.html')
+  })
+
+  test('无 anchor 时回退进程 cwd（旧行为兼容）', async () => {
+    const sem = createSemantics({ config: resolveConfig({}) })
+    const r = await sem.render({ markdown: '# 标题', title: 'T' })
+    expect(r.ok).toBe(true)
+    expect(r.outFile.startsWith(process.cwd())).toBe(true)
+  })
+
+  test('draftGet outFile 相对路径按 anchor 解析', async () => {
+    let written = null
+    const sem = createSemantics({
+      config: resolveConfig({ accounts: [{ name: 'a', appId: 'wxAAA', secretRef: 'SECRET_A' }], apiBase: 'https://fake.invalid' }),
+      fetchImpl: async (url) => {
+        const u = String(url)
+        if (u.includes('stable_token')) return new Response(JSON.stringify({ access_token: 'tok', expires_in: 7200 }), { status: 200 })
+        if (u.includes('draft/get')) return new Response(JSON.stringify({ news_item: [{ title: 'T', content: '<p>x</p>' }] }), { status: 200 })
+        return new Response(JSON.stringify({ errcode: 0 }), { status: 200 })
+      },
+      writeFileImpl: async (p, d) => { written = { path: p, data: d } },
+      mkdirImpl: async () => {},
+      resolveCredential: okCred(new Map([['SECRET_A', 'sec-a']])),
+      now: () => 1_000_000,
+    })
+    const r = await sem.draftGet({ mediaId: 'mid_x', outFile: 'draft.html' }, { anchor: '/tmp/workspace' })
+    expect(r.ok).toBe(true)
+    expect(written.path).toBe('/tmp/workspace/draft.html')
+    expect(r.contentFile).toBe('/tmp/workspace/draft.html')
+  })
+})
+
+describe('上传自动压缩（>10MB 超限大图；sharp 可选，V0.6.0）', () => {
+  const oversizedJpeg = () => `data:image/jpeg;base64,${Buffer.alloc(11 * 1024 * 1024, 7).toString('base64')}`
+  const makeUploadSem = (shrinkImageImpl) => createSemantics({
+    config: resolveConfig({ accounts: [{ name: 'a', appId: 'wxAAA', secretRef: 'SECRET_A' }], apiBase: 'https://fake.invalid' }),
+    fetchImpl: async (url) => {
+      const u = String(url)
+      if (u.includes('stable_token')) return new Response(JSON.stringify({ access_token: 'tok', expires_in: 7200 }), { status: 200 })
+      if (u.includes('add_material')) return new Response(JSON.stringify({ media_id: 'm1', url: 'https://mmbiz.qpic.cn/x.jpg' }), { status: 200 })
+      return new Response(JSON.stringify({ errcode: 0 }), { status: 200 })
+    },
+    resolveCredential: okCred(new Map([['SECRET_A', 'sec-a']])),
+    ...(shrinkImageImpl ? { shrinkImageImpl } : {}),
+    now: () => 1_000_000,
+  })
+
+  test('压缩器可用 → 超限自动压缩重试成功，message 注明', async () => {
+    const sem = makeUploadSem(async (input) => ({
+      bytes: new Uint8Array(2048),
+      filename: 'small.jpg',
+      contentType: 'image/jpeg',
+      compressedFromBytes: input.bytes.length,
+    }))
+    const r = await sem.uploadImage({ dataUrl: oversizedJpeg() })
+    expect(r.ok).toBe(true)
+    expect(r.filename).toBe('small.jpg')
+    expect(r.compressedFromBytes).toBe(11 * 1024 * 1024)
+    expect(r.compressedToBytes).toBe(2048)
+    expect(r.message).toContain('已自动压缩')
+  })
+
+  test('压缩失败/不可用 → 原样报 image_too_large', async () => {
+    const sem = makeUploadSem(async () => null)
+    const r = await sem.uploadImage({ dataUrl: oversizedJpeg() })
+    expect(r.ok).toBe(false)
+    expect(r.code).toBe('image_too_large')
+    expect(r.hint).toContain('sharp')
+  })
+
+  test('gif 不压缩（会丢动画）→ 直接 image_too_large', async () => {
+    const sem = makeUploadSem(async () => { throw new Error('shrink must not be called for gif') })
+    const r = await sem.uploadImage({ dataUrl: `data:image/gif;base64,${Buffer.alloc(11 * 1024 * 1024, 7).toString('base64')}` })
+    expect(r.ok).toBe(false)
+    expect(r.code).toBe('image_too_large')
   })
 })

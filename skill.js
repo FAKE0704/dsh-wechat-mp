@@ -56,7 +56,8 @@ export const WECHAT_MP_SKILL_CONTENT = `# 公众号文章交付规范（dsh-wech
 
 - \`wechat-mp-draft-get { mediaId, outFile: "<path>" }\`：正文全文 HTML 落盘到该本地文件，message 回路径与字符数——用 read 工具查看后改；不给 outFile 时只有一行摘要（mediaId/封面/作者/160 字预览）。
 - md 源稿还在工作区时优先改 md，走 render → preview → draft-update；源稿丢了才从草稿箱拉回全文。
-- 改完 \`wechat-mp-draft-update { mediaId, contentFile: <新 HTML> }\`：不给封面自动沿用旧草稿封面，不再被引用的旧封面素材自动清理。
+- \`wechat-mp-draft-update { mediaId, contentFile: <新 HTML> }\`：V0.6.0 起走官方原位更新，**media_id 保持不变**（失败自动回落建新删旧）；不给封面自动沿用旧草稿封面，不再被引用的旧封面素材自动清理。
+- 发布（认证账号）：\`wechat-mp-publish-list\` 查历史已发布文章（个人主体恒 48001，只能后台人工发）。
 
 ## 红线
 

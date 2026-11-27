@@ -1,6 +1,6 @@
 # dsh-wechat-mp
 
-微信公众号**文章**域 dsh 插件：在 dsh 会话里直接把文章推进公众号草稿箱、替换/删除草稿、提交发布并跟踪发布状态——十二个原生工具，**直连微信开放接口**，不依赖任何宿主平台（不需要 CreatorStack、不需要 MCP server、不需要额外后端）。
+微信公众号**文章**域 dsh 插件：在 dsh 会话里直接把文章推进公众号草稿箱、原位更新草稿、提交发布并跟踪发布状态——十三个原生工具，**直连微信开放接口**，不依赖任何宿主平台（不需要 CreatorStack、不需要 MCP server、不需要额外后端）。
 
 本仓库（[FAKE0704/dsh-wechat-mp](https://github.com/FAKE0704/dsh-wechat-mp)）即真源：V0.3.0 起（渲染器/预检/多账号）直接在本仓开发发布，不再走 Genshu monorepo 真源→镜像链路。
 
@@ -59,7 +59,7 @@ Secret 只用于换 `access_token`，token 只在进程内缓存，不落盘、�
 
 公众号后台「开发 → 基本配置 → IP 白名单」必须包含**运行 dsh 这台机器的出口 IP**。家庭宽带 IP 会变——变了就报 `40164`/`61004`，错误串里会带微信看到的真实出口 IP，照着加白名单即可。先跑 `wechat-mp-status` 可以在动文章之前把这个问题暴露出来。
 
-## 十二个工具
+## 十三个工具
 
 | 工具 | 作用 | 审批 |
 |---|---|---|
@@ -67,14 +67,15 @@ Secret 只用于换 `access_token`，token 只在进程内缓存，不落盘、�
 | `wechat-mp-render` | **Markdown → 公众号 HTML**（样式逐元素内联，渲染即预检，输出文件路径可直接当 `contentFile`） | 免审 |
 | `wechat-mp-precheck` | **正文预检**：字符数 ≤20000、体积 <1MB、图片格式白名单，超限给具体数字与建议 | 免审 |
 | `wechat-mp-preview` | 推预览页（GUI 侧边栏「公众号 → 预览」）给用户审查，用户点「推送到草稿箱」成稿 | 免审 |
-| `wechat-mp-upload-image` | 图片（本地 / URL / data URL）→ 永久素材，回 `media_id` + `url`；webp 自动转 jpg（需 sharp） | 免审 |
+| `wechat-mp-upload-image` | 图片（本地 / URL / data URL）→ 永久素材，回 `media_id` + `url`；webp 自动转 jpg，超 10MB 大图自动压缩（均需 sharp） | 免审 |
 | `wechat-mp-draft-create` | 新建草稿（自动封面 + 正文图片转素材 + 入口预检 fail-fast） | 免审 |
-| `wechat-mp-draft-update` | 替换草稿（先建新、成功后再删旧；旧稿删不掉只告警）；**缺封面自动沿用旧草稿封面**（V0.5.0） | 免审 |
+| `wechat-mp-draft-update` | **原位更新草稿**（官方 `draft/update`，media_id 不变；失败自动回落建新删旧）；缺封面自动沿用旧草稿封面 | 免审 |
 | `wechat-mp-draft-list` | 草稿箱列表（media_id/标题/作者/更新时间，分页 ≤20）；message 逐篇带「标题（mediaId）」 | 免审 |
 | `wechat-mp-draft-get` | 草稿详情（标题/作者/摘要/正文 HTML/封面素材/原文链接）；message 带 mediaId/封面/作者 + 160 字预览；`outFile` 把全文 HTML 落盘回路径（改稿拉回全文） | 免审 |
 | `wechat-mp-draft-delete` | 删草稿 | 免审 |
 | `wechat-mp-publish` | 提交发布（`freepublish`，异步），回 `publish_id` | **ask** |
 | `wechat-mp-publish-status` | 发布状态（发布中/成功/失败/审核不通过）+ 文章链接 | 免审 |
+| `wechat-mp-publish-list` | 已发布列表（分页：articleId/标题/链接/是否删除）。⚠️ 仅认证账号，个人主体恒 48001 | 免审 |
 
 除 `wechat-mp-publish`（只有 `mediaId`）外，全部工具接受可选 `account` 参数选择多账号（见下文「多账号」）。
 
@@ -124,7 +125,7 @@ wechat-mp-publish { mediaId: "..." }               # 人工批准后提交发布
 wechat-mp-publish-status { publishId: "..." }      # 发布成功后拿文章链接
 ```
 
-改稿 = 重新 `draft-create` 后 `draft-delete` 旧 id，或直接 `draft-update`（一次调用完成替换，返回新 media_id）。
+改稿：md 源稿在工作区就改 md 后 `draft-update`（V0.6.0 起走官方 `draft/update` 原位更新，**media_id 不变**；接口失败自动回落建新删旧）；源稿丢了用 `draft-get { mediaId, outFile }` 拉回全文看/改。
 
 ## 正文与图片
 
@@ -151,12 +152,14 @@ config:
 
 **向后兼容**：旧单账号 config（`appId` + `secretRef`）等价于一个名为 `default` 的账号，无需迁移；设置页继续编辑默认账号。凭据按账号各自的 `secretRef` 存。
 
-## webp 转换说明
+## webp 转换与大图压缩说明
 
 微信素材接口只认 jpg/png/gif/bmp 文件名后缀。插件在上传前侦测 webp（magic bytes / 扩展名 / content-type 三重）：
 
-- **装了 sharp** → 自动转 jpg（quality 90）后上传，正文图片与封面同样生效。V0.5.0 起 sharp 以 `optionalDependencies` 随包声明，`dsh plugin add` 安装包时一并装好（macOS/Linux/Windows 均有 N-API 预编译产物，无需编译）；
-- **没装**（如手工拷贝目录安装）→ 工具返回 `webp_convert_unavailable`，提示一次性安装 sharp 或手工转换，不会静默猜测。
+- **装了 sharp** → webp 自动转 jpg（quality 90）；**超过 10MB 的 jpg/png/webp 自动压缩**（降采样至 2000px 内 + quality 85→70→60 逐档重试，直到低于上限；gif 会丢动画、bmp 无收益，不压）。sharp 自 V0.5.0 起以 `optionalDependencies` 随包声明，`dsh plugin add` 安装包时一并装好（N-API 预编译产物，无需编译）；
+- **没装**（如手工拷贝目录安装）→ 工具返回 `webp_convert_unavailable` / `image_too_large`，提示一次性安装 sharp 或手工处理，不会静默猜测。
+
+**路径锚定（V0.6.0）**：所有落盘/读文件参数（`contentFile`/`mdFile`/`outFile`/`thumbFile`）的相对路径按**当前会话工作目录**解析（经 working-directory 服务），不再落到 profile 目录；`outFile` 会自动创建父目录。
 
 ## 内置 skill：交付格式规范 + 长文写作规范（V0.5.0）
 
@@ -164,6 +167,13 @@ config:
 
 - **`write-article`**（`skills/write-article/`）：内容与结构规范——editorial 支柱骨架、语气合规、标题/导语硬指标；`references/editorial.md` 不内联正文，按「渐进阅读条件」用绝对路径按需精读（写新稿全文精读、改稿读 §4/§7、纯交付查 §5）；交付链含 CreatorStack 真源机与 DSH 环境两个分支。
 - **`wechat-mp-article`**（代码内置）：交付格式规范——「最终交付物 = 草稿箱草稿」、render → preview → 草稿标准链路、封面规则、message 取 mediaId 的读法。写稿问题先加载 `write-article`，交付链路问题加载本 skill。
+
+## V0.6.0 变更摘要
+
+- **draft-update 原位更新**：改走官方 `draft/update` 接口，**media_id 保持不变**（外部引用不断链、无先建后删失败窗口）；接口失败自动回落到「建新删旧」重建（返回 `mode: inplace | recreate` 可辨）。封面沿用与孤儿清理逻辑不变。
+- **路径锚定**：所有相对路径（`contentFile`/`mdFile`/`outFile`/`thumbFile`）按**会话工作目录**解析（working-directory 服务），不再误落 profile 目录。
+- **新工具 `wechat-mp-publish-list`**：已发布文章列表（`freepublish/batchget`，分页，message 逐篇带标题/链接）。⚠️ 仅认证账号可用，个人主体恒 48001。
+- **大图自动压缩**：超 10MB 的 jpg/png/webp 上传前自动降采样 + 降质（sharp，2000px 内，quality 85→70→60），gif/bmp 不压；无 sharp 时保持明确报错。
 
 ## V0.5.0 变更摘要
 

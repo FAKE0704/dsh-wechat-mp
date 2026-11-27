@@ -88,14 +88,30 @@ export function apply(ctx, config) {
     return decideWechatMpGate(exec) ?? next()
   })
 
+  // 会话工作目录锚定：工具落盘/读文件按「当前会话工作目录」解析，而不是插件子进程的
+  // cwd（profile 目录）。经 working-directory 服务按 exec.agent 解析，缺失时回退进程 cwd。
+  const workingDirectory = ctx.get('workingDirectory')
+  const resolveAnchor = async (exec) => {
+    if (!workingDirectory || !exec?.agent) return undefined
+    try {
+      return await workingDirectory.ensure(exec.agent, exec.signal)
+    } catch { /* 目录不可用时降级 */ }
+    try {
+      return workingDirectory.get(exec.agent.session)
+    } catch {
+      return undefined
+    }
+  }
+
   const register = (toolName, description, parameters, run) => {
     ctx.tools.register({
       name: toolName,
       description,
       parameters,
       output: OUTPUT,
-      async execute(args) {
-        return run(args ?? {})
+      async execute(args, exec) {
+        const anchor = await resolveAnchor(exec)
+        return run(args ?? {}, anchor ? { anchor } : undefined)
       },
     })
   }
@@ -106,7 +122,7 @@ export function apply(ctx, config) {
     sem.status)
 
   register('wechat-mp-upload-image',
-    '把一张图片上传为公众号永久素材，返回 media_id 与 mmbiz.qpic.cn 地址。用途：拿封面素材 id（草稿接口只认 thumb_media_id），或先把正文图片转成公众号可显示的内链。支持本地文件（file）/网络地址（url）/data URL（dataUrl）三选一。只写素材库，免审。',
+    '把一张图片上传为公众号永久素材，返回 media_id 与 mmbiz.qpic.cn 地址。用途：拿封面素材 id（草稿接口只认 thumb_media_id），或先把正文图片转成公众号可显示的内链。支持本地文件（file）/网络地址（url）/data URL（dataUrl）三选一；超过 10MB 的 jpg/png/webp 会自动压缩（需可选依赖 sharp）后重试。只写素材库，免审。',
     WITH_ACCOUNT({
         file: { type: 'string', description: '本地图片路径（绝对路径或相对当前目录）' },
         url: { type: 'string', description: '网络图片地址（http/https）' },
@@ -120,8 +136,8 @@ export function apply(ctx, config) {
     sem.draftCreate)
 
   register('wechat-mp-draft-update',
-    '替换一篇已有草稿：按新内容新建一份，成功后再删除旧草稿（新 media_id 取代旧 id；旧稿删除失败只告警不丢新稿）。参数同 draft-create，另加 mediaId。免审。',
-    WITH_ACCOUNT({ mediaId: { type: 'string', description: '要替换的草稿 media_id（wechat-mp-draft-list 可查）' }, ...PUBLISH_ARGS }, ['mediaId', ...PUBLISH_REQUIRED]),
+    '替换一篇已有草稿：首选官方原位更新（media_id 不变，外部引用不断链），接口失败自动回落「建新删旧」重建。参数同 draft-create，另加 mediaId；不给封面自动沿用旧草稿封面。免审。',
+    WITH_ACCOUNT({ mediaId: { type: 'string', description: '要更新的草稿 media_id（wechat-mp-draft-list 可查）' }, ...PUBLISH_ARGS }, ['mediaId', ...PUBLISH_REQUIRED]),
     sem.draftUpdate)
 
   register('wechat-mp-draft-list',
@@ -154,6 +170,14 @@ export function apply(ctx, config) {
     '查发布任务状态（发布中/成功/失败/审核不通过/取消），成功时回文章链接。免审。',
     WITH_ACCOUNT({ publishId: { type: 'string', description: 'wechat-mp-publish 返回的 publish_id' } }, ['publishId']),
     sem.publishStatus)
+
+  register('wechat-mp-publish-list',
+    '查已发布文章列表（分页，返回 articleId/标题/链接/是否删除）。⚠️ 仅认证账号可用——个人主体账号会被回收发布接口权限（恒 48001），列表同样不可用。发布提交（wechat-mp-publish）后用 wechat-mp-publish-status 查单次任务状态，用本工具查历史全量。免审。',
+    WITH_ACCOUNT({
+      offset: { type: 'number', description: '偏移（缺省 0）' },
+      count: { type: 'number', description: '每页条数（1-20，缺省 10）' },
+    }),
+    sem.publishList)
 
   register('wechat-mp-precheck',
     '正文预检（免网络）：校验字符数 ≤20000、体积 <1MB、图片格式白名单（jpg/jpeg/png/gif/bmp）。超限给具体数字与处置建议（webp 给转换建议）。draft-create 入口已内置同一预检（fail-fast），推稿前单独跑它可提前发现正文问题。正文可用 content（HTML 字符串）或 contentFile（文件路径）。',
@@ -188,8 +212,8 @@ export function apply(ctx, config) {
       thumbFile: { type: 'string', description: '封面图片本地路径（可选；发送时自动上传永久素材）' },
       thumbUrl: { type: 'string', description: '封面图片网络地址（可选）' },
     }, ['title']),
-    async (args) => {
-      const res = await sem.preview(args)
+    async (args, call) => {
+      const res = await sem.preview(args, call)
       if (res?.ok === true && typeof res.html === 'string' && res.html !== '') {
         settings.pushPreview(res)
         const { html: _stripped, ...summary } = res
