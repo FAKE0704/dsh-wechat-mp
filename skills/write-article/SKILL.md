@@ -16,8 +16,8 @@ description: CreatorStack 公众号长文写作——按 editorial 的支柱骨�
    - 改稿 / 改语气 → 只读 §4 语气与品牌边界 + §7 合规红线
    - 纯排版 / 纯交付 → 只查 §5 平台格式
    - 文件读不到时 → 按本 skill 正文的骨架/语气/合规节执行，勿重试、勿凭记忆复述细节
-2. `references/instructions.md` —— 暗色卡片内联样式 HTML 排版语法（一段一卡片 + 色板，标题卡/内容卡/代码块模板）。
-   **渐进阅读条件**：仅在需要按卡片模板手工排版时读（CreatorStack 链路的 typeset 产物核对，或用户点名「排成卡片」样式）；DSH 默认链路走 `wechat-mp-render` 主题排版，**不读它、也不要手工写卡片 HTML**。
+2. `references/html-syntax.md` —— 微信端 HTML 样式存活矩阵（2026-11-23 实测：卡片用 `<section style>`、徽章用 `display:inline-block`、`<a>` 整条剥掉、`position:absolute` 被剥、外域 `<img>` 静默丢弃、`<tr>` 背景色不生效）。
+   **渐进阅读条件**：仅在手工写内联 HTML 排版时读（CreatorStack 链路的 typeset 核对、或 `wechat-mp-render` 主题外的定制版式）；配套实验载荷 `references/style-ceiling.html`（A01–A20 支持性探针，可经 `wechat-mp-draft-create` 实机复验）。DSH 默认链路走 `wechat-mp-render` 主题排版，**不读它、也不要手工写卡片 HTML**。
 2. **事实来源纪律**：一手材料优先（官方发布页、官方文档、仓库代码/提交）；查不到就写「待验证/据说」，**不编数字、不伪装实测**
 3. 格式硬指标（公众号）：标题 **≤24 字**（按字符计，含英文与标点）、导语 **≤50 字**
 

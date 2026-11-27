@@ -84,19 +84,20 @@ export function loadBundledSkill(dir) {
     }
     if (!meta.name || !meta.description) return null
     const body = raw.slice(match[0].length).trim()
-    // instructions.md（旧布局）裸拼。references/ 不内联正文，只注入「带绝对路径的资源
-    // 索引」：模型按 SKILL.md 声明的阅读条件用 read 工具按需精读（渐进注入），resourceBase
-    // 同时交给宿主做资源定位。全量内联会让每次写稿任务常驻全部参考材料，不值得。
+    // references/ 不内联正文，只注入「带绝对路径的资源索引」：模型按 SKILL.md 声明的阅读
+    // 条件用 read 工具按需精读（渐进注入），resourceBase 同时交给宿主做资源定位。
+    // 全量内联会让每次写稿任务常驻全部参考材料，不值得。.html 载荷（如 style-ceiling.html）
+    // 同样进索引，标题取 <title>。
     const parts = [body]
-    try {
-      parts.push(readFileSync(join(base, 'instructions.md'), 'utf8').trim())
-    } catch { /* instructions.md 可选 */ }
     const references = []
     try {
-      const refs = readdirSync(join(base, 'references')).filter((f) => f.endsWith('.md')).sort()
+      const refs = readdirSync(join(base, 'references'))
+        .filter((f) => f.endsWith('.md') || f.endsWith('.html'))
+        .sort()
       for (const ref of refs) {
         const rawRef = readFileSync(join(base, 'references', ref), 'utf8')
         const heading = /^#\s+(.+)$/m.exec(rawRef)
+          ?? (ref.endsWith('.html') ? /<title>(.+?)<\/title>/.exec(rawRef) : null)
         const title = (heading ? heading[1] : ref).trim().slice(0, 60)
         references.push({ file: `references/${ref}`, path: join(base, 'references', ref), title })
       }

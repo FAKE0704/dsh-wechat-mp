@@ -22,8 +22,10 @@ describe('loadBundledSkill（skills/ 目录文件形态 skill）', () => {
     expect(s.content).toContain('资源索引')
     expect(s.content).toMatch(/references\/editorial\.md` → .+editorial\.md（/)
     expect(s.content).not.toContain('## 1. 账号定位') // 全文未内联
-    // instructions.md（暗色卡片排版语法）同样进索引，且带渐进阅读条件
-    expect(s.content).toContain('references/instructions.md')
+    // html-syntax.md（样式存活矩阵）+ style-ceiling.html（探针载荷）都进索引，且带渐进阅读条件
+    expect(s.content).toContain('references/html-syntax.md')
+    expect(s.content).toMatch(/references\/style-ceiling\.html` → .+style-ceiling\.html（/)
+    expect(s.content).not.toContain('references/instructions.md') // 旧暗色卡片模板已撤
     expect(s.content).toContain('渐进阅读条件')
     expect(s.resourceBase?.kind).toBe('directory')
     expect(s.resourceBase?.path.endsWith('skills/write-article')).toBe(true)
