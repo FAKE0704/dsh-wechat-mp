@@ -619,10 +619,16 @@ describe('会话工作目录锚定（call.anchor，V0.6.0）', () => {
   })
 
   test('无 anchor 时回退进程 cwd（旧行为兼容）', async () => {
-    const sem = createSemantics({ config: resolveConfig({}) })
+    let written = null
+    const sem = createSemantics({
+      config: resolveConfig({}),
+      writeFileImpl: async (p, d) => { written = { path: p, data: d } },
+      mkdirImpl: async () => {},
+    })
     const r = await sem.render({ markdown: '# 标题', title: 'T' })
     expect(r.ok).toBe(true)
     expect(r.outFile.startsWith(process.cwd())).toBe(true)
+    expect(written.path).toBe(r.outFile) // 注入写，不碰真实文件系统
   })
 
   test('draftGet outFile 相对路径按 anchor 解析', async () => {
